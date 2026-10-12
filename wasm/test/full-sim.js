@@ -15,11 +15,18 @@ export async function run(root) {
   );
   if (window.altdTestOptions?.population)
     scenario.options.population = window.altdTestOptions.population;
-  const [scene, network, model] = await Promise.all(
+  let [scene, network, model] = await Promise.all(
     [scenario.scene, scenario.network, scenario.model].map((p) =>
       text(root + p),
     ),
   );
+  if (scenario.vehicleTemplate) {
+    const template = JSON.parse(await text(root + scenario.vehicleTemplate));
+    const input = JSON.parse(scene);
+    input.vehicle = template.vehicle;
+    input.physics = template.physics;
+    scene = JSON.stringify(input);
+  }
   const cpu = new lib.Simulation(scene, network, model, scenario.options);
   const gpu = new lib.Simulation(scene, network, model, scenario.options);
   cpu.startWithShape(Uint32Array.from(scenario.shape));

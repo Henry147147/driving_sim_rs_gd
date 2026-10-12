@@ -2136,6 +2136,76 @@ mod tests {
         assert_eq!(gpu.backend(), Backend::Hip, "{:?}", gpu.backend_note());
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn snowmobile_hip_sessions_stay_on_gpu_and_match_cpu() {
+        let Some(_hip) = hip_or_skip() else { return };
+        let settings = serde_json::from_value(load("assets/random_track_settings.json")).unwrap();
+        for math in MathProfile::ALL {
+            let (_, scene) = crate::track::training_tracks::training_scene_at(
+                &load("assets/scenes/snowmobile_template.json"),
+                &settings,
+                None,
+                1729,
+                0,
+                3,
+                math,
+            )
+            .unwrap();
+            let make = |backend: &str| {
+                Session::new(
+                    &scene,
+                    &load("assets/networks/formula.json"),
+                    &load("assets/models/formula.json"),
+                    SessionOptions::from_json(
+                        &serde_json::json!({"backend": backend, "population": 17, "seed": 5,
+                            "mathProfile": math.to_string()})
+                        .to_string(),
+                    )
+                    .unwrap(),
+                )
+                .unwrap()
+            };
+            let mut cpu = make("cpu");
+            let mut gpu = make("hip");
+            assert_eq!((gpu.backend(), gpu.backend_note()), (Backend::Hip, None), "{math}");
+            let surfaces = crate::gpu::simulation::SurfaceTable::new(&cpu.runner.world.vehicle);
+            for session in [&mut cpu, &mut gpu] {
+                session.start_with_shape(&[20, 8, 5]).unwrap();
+            }
+            for generation in 0..2 {
+                for ticks in [1, 37, 90, 120, 352] {
+                    assert_eq!(cpu.advance(ticks, false).unwrap(), gpu.advance(ticks, false).unwrap());
+                    gpu.sync().unwrap();
+                    assert_eq!((gpu.backend(), gpu.backend_note()), (Backend::Hip, None), "{math}");
+                    assert_eq!(
+                        gpu.runner.canonical_state(&surfaces).unwrap(),
+                        cpu.runner.canonical_state(&surfaces).unwrap(),
+                        "{math}, generation {generation}, window {ticks}",
+                    );
+                    for i in 0..17 {
+                        assert_eq!(gpu.sensors(i).unwrap(), cpu.sensors(i).unwrap());
+                        assert!(gpu.runner.agents[i].car.wheels[4].previous_position.is_some());
+                    }
+                }
+                assert_eq!(gpu.next_generation().unwrap(), cpu.next_generation().unwrap());
+                assert_eq!(gpu.checkpoint_bytes().unwrap(), cpu.checkpoint_bytes().unwrap());
+            }
+            let checkpoint = cpu.checkpoint_bytes().unwrap();
+            for session in [&mut cpu, &mut gpu] {
+                session.restore_checkpoint_bytes(&checkpoint).unwrap();
+                session.advance(37, false).unwrap();
+                session.sync().unwrap();
+            }
+            assert_eq!((gpu.backend(), gpu.backend_note()), (Backend::Hip, None), "{math}");
+            assert_eq!(
+                gpu.runner.canonical_state(&surfaces).unwrap(),
+                cpu.runner.canonical_state(&surfaces).unwrap(),
+                "{math}, restored checkpoint",
+            );
+        }
+    }
+
     /// Scenes HIP cannot run, and a second concurrent HIP session, fall back
     /// to the CPU with a reason; the device is free again once a HIP session drops.
     #[cfg(not(target_arch = "wasm32"))]

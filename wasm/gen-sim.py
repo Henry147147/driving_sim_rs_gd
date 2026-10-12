@@ -1128,6 +1128,12 @@ for n in ast.ext:
         lines.append(
             f"const {name(n.name)}: {wg(glob[n.name])} = {init(n.init,glob[n.name])};"
         )
+# Window kernels access raw car words too; derive their stride and offsets
+# from the same layout as the generated loaders instead of duplicating them.
+lines.append(f"const CAR_WORDS: u32 = {layouts['Car'][0]//4}u;")
+for field in ["flags", "error"]:
+    offset = next(off for n, _, off in layouts["Car"][2] if n == field)
+    lines.append(f"const CAR_{field.upper()}_WORD: u32 = {offset//4}u;")
 for st in [
     "World",
     "NearGrid",
@@ -1203,7 +1209,12 @@ lines.append(
     + "\n".join(
         load_into(ft, f"(o+{off//4}u)", f"sim_car.{name(n)}", "cars")
         for n, ft, off in layouts["Car"][2]
-        if off < 96 or n == "error"
+        if n in [
+            "position", "velocity", "acceleration", "reset_acceleration",
+            "basis_x", "basis_y", "rotation", "transform_angle",
+            "angular_velocity", "boost_energy", "flags", "collision_count",
+            "tick", "wheel_angle", "error",
+        ]
     )
     + "\n}"
 )

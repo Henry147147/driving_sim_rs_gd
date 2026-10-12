@@ -1317,7 +1317,7 @@ ALTD_API int altd_gpu_sim_window(Sim* s, const WindowArgs* a, uint64_t* executed
     return 0;
 }
 
-ALTD_API int altd_gpu_version() { return 10; }
+ALTD_API int altd_gpu_version() { return 11; }
 
 // The runtime the library was built for: "HIP" (AMD) or "CUDA" (NVIDIA).
 ALTD_API const char* altd_gpu_platform() { return ALTD_PLATFORM; }
