@@ -34,9 +34,9 @@ struct Car {
     flags: u32,
     collision_count: u32,
     tick: U64,
-    wheel_angle: array<f32, 4>,
-    wheel_previous: array<vec2<f32>, 4>,
-    wheel_surface: array<u32, 4>,
+    wheel_angle: array<f32, 5>,
+    wheel_previous: array<vec2<f32>, 5>,
+    wheel_surface: array<u32, 5>,
     wheel_has_previous: u32,
     pair_count: u32,
     contact_count: u32,
@@ -101,7 +101,7 @@ struct WheelDesc {
 }
 
 struct VehicleDesc {
-    wheels: array<WheelDesc, 4>,
+    wheels: array<WheelDesc, 5>,
     wheel_count: u32,
     custom_integrator: u32,
     center_steering: u32,
@@ -315,7 +315,7 @@ var<private> sim_car: Car;
 
 var<private> sim_agent: Agent;
 
-const MAX_WHEELS: i32 = 4i;
+const MAX_WHEELS: i32 = 5i;
 
 const MAX_PAIRS: i32 = 16i;
 
@@ -475,11 +475,17 @@ const UCRT_POW11_EXP: array<U64, 512> = array<U64, 512>(U64(0x00000000u, 0x00000
 
 const PI_F: f32 = 3.1415927410125732f;
 
+const CAR_WORDS: u32 = 804u;
+
+const CAR_FLAGS_WORD: u32 = 16u;
+
+const CAR_ERROR_WORD: u32 = 43u;
+
 fn load_World(o: u32) -> World { return World(world_data[(o + 0u)], world_data[(o + 1u)], world_data[(o + 2u)], bitcast<f32>(world_data[(o + 3u)]), world_data[(o + 4u)], world_data[(o + 5u)], world_data[(o + 6u)], world_data[(o + 7u)], world_data[(o + 8u)], i32(world_data[(o + 9u)]), i32(world_data[(o + 10u)]), i32(world_data[(o + 11u)]), i32(world_data[(o + 12u)]), world_data[(o + 13u)], world_data[(o + 14u)], world_data[(o + 15u)], world_data[(o + 16u)], world_data[(o + 17u)], load_NearGrid((o + 18u)), world_data[(o + 28u)], bitcast<f32>(world_data[(o + 29u)]), world_data[(o + 30u)], world_data[(o + 31u)], world_data[(o + 32u)], load_NearGrid((o + 34u)), world_data[(o + 44u)], world_data[(o + 45u)], world_data[(o + 46u)], world_data[(o + 47u)], world_data[(o + 48u)], load_NearGrid((o + 50u)), U64(world_data[(o + 60u)], world_data[(o + 60u) + 1u]), world_data[(o + 62u)]); }
 
 fn load_NearGrid(o: u32) -> NearGrid { return NearGrid(U64(world_data[(o + 0u)], world_data[(o + 0u) + 1u]), U64(world_data[(o + 2u)], world_data[(o + 2u) + 1u]), U64(world_data[(o + 4u)], world_data[(o + 4u) + 1u]), world_data[(o + 6u)], world_data[(o + 7u)], world_data[(o + 8u)], world_data[(o + 9u)]); }
 
-fn load_VehicleDesc(o: u32) -> VehicleDesc { return VehicleDesc(array<WheelDesc, 4>(load_WheelDesc(((o + 0u) + 0u)), load_WheelDesc(((o + 0u) + 10u)), load_WheelDesc(((o + 0u) + 20u)), load_WheelDesc(((o + 0u) + 30u))), world_data[(o + 40u)], world_data[(o + 41u)], world_data[(o + 42u)], world_data[(o + 43u)], world_data[(o + 44u)], world_data[(o + 45u)], U64(world_data[(o + 46u)], world_data[(o + 46u) + 1u]), U64(world_data[(o + 48u)], world_data[(o + 48u) + 1u]), U64(world_data[(o + 50u)], world_data[(o + 50u) + 1u]), U64(world_data[(o + 52u)], world_data[(o + 52u) + 1u]), bitcast<f32>(world_data[(o + 54u)]), bitcast<f32>(world_data[(o + 55u)]), bitcast<f32>(world_data[(o + 56u)]), bitcast<f32>(world_data[(o + 57u)]), bitcast<f32>(world_data[(o + 58u)]), bitcast<f32>(world_data[(o + 59u)]), bitcast<f32>(world_data[(o + 60u)]), bitcast<f32>(world_data[(o + 61u)]), vec2<f32>(bitcast<f32>(world_data[(o + 62u) + 0u]), bitcast<f32>(world_data[(o + 62u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 64u) + 0u]), bitcast<f32>(world_data[(o + 64u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 66u) + 0u]), bitcast<f32>(world_data[(o + 66u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 68u) + 0u]), bitcast<f32>(world_data[(o + 68u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 70u) + 0u]), bitcast<f32>(world_data[(o + 70u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 72u) + 0u]), bitcast<f32>(world_data[(o + 72u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 74u) + 0u]), bitcast<f32>(world_data[(o + 74u) + 1u])), bitcast<f32>(world_data[(o + 76u)]), bitcast<f32>(world_data[(o + 77u)]), bitcast<f32>(world_data[(o + 78u)]), bitcast<f32>(world_data[(o + 79u)]), bitcast<f32>(world_data[(o + 80u)]), bitcast<f32>(world_data[(o + 81u)]), bitcast<f32>(world_data[(o + 82u)]), bitcast<f32>(world_data[(o + 83u)])); }
+fn load_VehicleDesc(o: u32) -> VehicleDesc { return VehicleDesc(array<WheelDesc, 5>(load_WheelDesc(((o + 0u) + 0u)), load_WheelDesc(((o + 0u) + 10u)), load_WheelDesc(((o + 0u) + 20u)), load_WheelDesc(((o + 0u) + 30u)), load_WheelDesc(((o + 0u) + 40u))), world_data[(o + 50u)], world_data[(o + 51u)], world_data[(o + 52u)], world_data[(o + 53u)], world_data[(o + 54u)], world_data[(o + 55u)], U64(world_data[(o + 56u)], world_data[(o + 56u) + 1u]), U64(world_data[(o + 58u)], world_data[(o + 58u) + 1u]), U64(world_data[(o + 60u)], world_data[(o + 60u) + 1u]), U64(world_data[(o + 62u)], world_data[(o + 62u) + 1u]), bitcast<f32>(world_data[(o + 64u)]), bitcast<f32>(world_data[(o + 65u)]), bitcast<f32>(world_data[(o + 66u)]), bitcast<f32>(world_data[(o + 67u)]), bitcast<f32>(world_data[(o + 68u)]), bitcast<f32>(world_data[(o + 69u)]), bitcast<f32>(world_data[(o + 70u)]), bitcast<f32>(world_data[(o + 71u)]), vec2<f32>(bitcast<f32>(world_data[(o + 72u) + 0u]), bitcast<f32>(world_data[(o + 72u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 74u) + 0u]), bitcast<f32>(world_data[(o + 74u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 76u) + 0u]), bitcast<f32>(world_data[(o + 76u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 78u) + 0u]), bitcast<f32>(world_data[(o + 78u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 80u) + 0u]), bitcast<f32>(world_data[(o + 80u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 82u) + 0u]), bitcast<f32>(world_data[(o + 82u) + 1u])), vec2<f32>(bitcast<f32>(world_data[(o + 84u) + 0u]), bitcast<f32>(world_data[(o + 84u) + 1u])), bitcast<f32>(world_data[(o + 86u)]), bitcast<f32>(world_data[(o + 87u)]), bitcast<f32>(world_data[(o + 88u)]), bitcast<f32>(world_data[(o + 89u)]), bitcast<f32>(world_data[(o + 90u)]), bitcast<f32>(world_data[(o + 91u)]), bitcast<f32>(world_data[(o + 92u)]), bitcast<f32>(world_data[(o + 93u)])); }
 
 fn load_WheelDesc(o: u32) -> WheelDesc { return WheelDesc(vec2<f32>(bitcast<f32>(world_data[(o + 0u) + 0u]), bitcast<f32>(world_data[(o + 0u) + 1u])), world_data[(o + 2u)], world_data[(o + 3u)], bitcast<f32>(world_data[(o + 4u)]), bitcast<f32>(world_data[(o + 5u)]), bitcast<f32>(world_data[(o + 6u)]), bitcast<f32>(world_data[(o + 7u)]), U64(world_data[(o + 8u)], world_data[(o + 8u) + 1u])); }
 
@@ -509,47 +515,47 @@ sim_car.boost_energy = bitcast<f32>(cars[(o+15u)]);
 sim_car.flags = cars[(o+16u)];
 sim_car.collision_count = cars[(o+17u)];
 sim_car.tick = U64(cars[(o+18u)], cars[(o+18u) + 1u]);
-for (var copy_1=0u; copy_1<4u+params.pad; copy_1=copy_1+1u) {
+for (var copy_1=0u; copy_1<5u+params.pad; copy_1=copy_1+1u) {
 sim_car.wheel_angle[copy_1] = bitcast<f32>(cars[((o+20u)+copy_1*1u)]);
 }
-for (var copy_2=0u; copy_2<4u+params.pad; copy_2=copy_2+1u) {
-sim_car.wheel_previous[copy_2] = vec2<f32>(bitcast<f32>(cars[((o+24u)+copy_2*2u) + 0u]), bitcast<f32>(cars[((o+24u)+copy_2*2u) + 1u]));
+for (var copy_2=0u; copy_2<5u+params.pad; copy_2=copy_2+1u) {
+sim_car.wheel_previous[copy_2] = vec2<f32>(bitcast<f32>(cars[((o+25u)+copy_2*2u) + 0u]), bitcast<f32>(cars[((o+25u)+copy_2*2u) + 1u]));
 }
-for (var copy_3=0u; copy_3<4u+params.pad; copy_3=copy_3+1u) {
-sim_car.wheel_surface[copy_3] = cars[((o+32u)+copy_3*1u)];
+for (var copy_3=0u; copy_3<5u+params.pad; copy_3=copy_3+1u) {
+sim_car.wheel_surface[copy_3] = cars[((o+35u)+copy_3*1u)];
 }
-sim_car.wheel_has_previous = cars[(o+36u)];
-sim_car.pair_count = cars[(o+37u)];
-sim_car.contact_count = cars[(o+38u)];
-sim_car.error = cars[(o+39u)];
-sim_car.shape_position = vec2<f32>(bitcast<f32>(cars[(o+40u) + 0u]), bitcast<f32>(cars[(o+40u) + 1u]));
-sim_car.shape_size = vec2<f32>(bitcast<f32>(cars[(o+42u) + 0u]), bitcast<f32>(cars[(o+42u) + 1u]));
-sim_car.leaf_min = vec2<f32>(bitcast<f32>(cars[(o+44u) + 0u]), bitcast<f32>(cars[(o+44u) + 1u]));
-sim_car.leaf_max = vec2<f32>(bitcast<f32>(cars[(o+46u) + 0u]), bitcast<f32>(cars[(o+46u) + 1u]));
+sim_car.wheel_has_previous = cars[(o+40u)];
+sim_car.pair_count = cars[(o+41u)];
+sim_car.contact_count = cars[(o+42u)];
+sim_car.error = cars[(o+43u)];
+sim_car.shape_position = vec2<f32>(bitcast<f32>(cars[(o+44u) + 0u]), bitcast<f32>(cars[(o+44u) + 1u]));
+sim_car.shape_size = vec2<f32>(bitcast<f32>(cars[(o+46u) + 0u]), bitcast<f32>(cars[(o+46u) + 1u]));
+sim_car.leaf_min = vec2<f32>(bitcast<f32>(cars[(o+48u) + 0u]), bitcast<f32>(cars[(o+48u) + 1u]));
+sim_car.leaf_max = vec2<f32>(bitcast<f32>(cars[(o+50u) + 0u]), bitcast<f32>(cars[(o+50u) + 1u]));
 for (var copy_4=0u; copy_4<16u+params.pad; copy_4=copy_4+1u) {
-sim_car.pairs[copy_4] = cars[((o+48u)+copy_4*1u)];
+sim_car.pairs[copy_4] = cars[((o+52u)+copy_4*1u)];
 }
 for (var copy_5=0u; copy_5<16u+params.pad; copy_5=copy_5+1u) {
-sim_car.axes[copy_5] = vec2<f32>(bitcast<f32>(cars[((o+64u)+copy_5*2u) + 0u]), bitcast<f32>(cars[((o+64u)+copy_5*2u) + 1u]));
+sim_car.axes[copy_5] = vec2<f32>(bitcast<f32>(cars[((o+68u)+copy_5*2u) + 0u]), bitcast<f32>(cars[((o+68u)+copy_5*2u) + 1u]));
 }
 for (var copy_6=0u; copy_6<32u+params.pad; copy_6=copy_6+1u) {
-sim_car.contacts[copy_6].normal = vec2<f32>(bitcast<f32>(cars[(((o+96u)+copy_6*22u)+0u) + 0u]), bitcast<f32>(cars[(((o+96u)+copy_6*22u)+0u) + 1u]));
-sim_car.contacts[copy_6].point = vec2<f32>(bitcast<f32>(cars[(((o+96u)+copy_6*22u)+2u) + 0u]), bitcast<f32>(cars[(((o+96u)+copy_6*22u)+2u) + 1u]));
-sim_car.contacts[copy_6].wall_point = vec2<f32>(bitcast<f32>(cars[(((o+96u)+copy_6*22u)+4u) + 0u]), bitcast<f32>(cars[(((o+96u)+copy_6*22u)+4u) + 1u]));
-sim_car.contacts[copy_6].local_point = vec2<f32>(bitcast<f32>(cars[(((o+96u)+copy_6*22u)+6u) + 0u]), bitcast<f32>(cars[(((o+96u)+copy_6*22u)+6u) + 1u]));
-sim_car.contacts[copy_6].wall_local_point = vec2<f32>(bitcast<f32>(cars[(((o+96u)+copy_6*22u)+8u) + 0u]), bitcast<f32>(cars[(((o+96u)+copy_6*22u)+8u) + 1u]));
-sim_car.contacts[copy_6].depth = bitcast<f32>(cars[(((o+96u)+copy_6*22u)+10u)]);
-sim_car.contacts[copy_6].shape = cars[(((o+96u)+copy_6*22u)+11u)];
-sim_car.contacts[copy_6].flags = cars[(((o+96u)+copy_6*22u)+12u)];
-sim_car.contacts[copy_6].normal_mass = bitcast<f32>(cars[(((o+96u)+copy_6*22u)+13u)]);
-sim_car.contacts[copy_6].tangent_mass = bitcast<f32>(cars[(((o+96u)+copy_6*22u)+14u)]);
-sim_car.contacts[copy_6].bias = bitcast<f32>(cars[(((o+96u)+copy_6*22u)+15u)]);
-sim_car.contacts[copy_6].bounce = bitcast<f32>(cars[(((o+96u)+copy_6*22u)+16u)]);
-sim_car.contacts[copy_6].friction = bitcast<f32>(cars[(((o+96u)+copy_6*22u)+17u)]);
-sim_car.contacts[copy_6].acc_normal = bitcast<f32>(cars[(((o+96u)+copy_6*22u)+18u)]);
-sim_car.contacts[copy_6].acc_tangent = bitcast<f32>(cars[(((o+96u)+copy_6*22u)+19u)]);
-sim_car.contacts[copy_6].acc_bias = bitcast<f32>(cars[(((o+96u)+copy_6*22u)+20u)]);
-sim_car.contacts[copy_6].acc_bias_center = bitcast<f32>(cars[(((o+96u)+copy_6*22u)+21u)]);
+sim_car.contacts[copy_6].normal = vec2<f32>(bitcast<f32>(cars[(((o+100u)+copy_6*22u)+0u) + 0u]), bitcast<f32>(cars[(((o+100u)+copy_6*22u)+0u) + 1u]));
+sim_car.contacts[copy_6].point = vec2<f32>(bitcast<f32>(cars[(((o+100u)+copy_6*22u)+2u) + 0u]), bitcast<f32>(cars[(((o+100u)+copy_6*22u)+2u) + 1u]));
+sim_car.contacts[copy_6].wall_point = vec2<f32>(bitcast<f32>(cars[(((o+100u)+copy_6*22u)+4u) + 0u]), bitcast<f32>(cars[(((o+100u)+copy_6*22u)+4u) + 1u]));
+sim_car.contacts[copy_6].local_point = vec2<f32>(bitcast<f32>(cars[(((o+100u)+copy_6*22u)+6u) + 0u]), bitcast<f32>(cars[(((o+100u)+copy_6*22u)+6u) + 1u]));
+sim_car.contacts[copy_6].wall_local_point = vec2<f32>(bitcast<f32>(cars[(((o+100u)+copy_6*22u)+8u) + 0u]), bitcast<f32>(cars[(((o+100u)+copy_6*22u)+8u) + 1u]));
+sim_car.contacts[copy_6].depth = bitcast<f32>(cars[(((o+100u)+copy_6*22u)+10u)]);
+sim_car.contacts[copy_6].shape = cars[(((o+100u)+copy_6*22u)+11u)];
+sim_car.contacts[copy_6].flags = cars[(((o+100u)+copy_6*22u)+12u)];
+sim_car.contacts[copy_6].normal_mass = bitcast<f32>(cars[(((o+100u)+copy_6*22u)+13u)]);
+sim_car.contacts[copy_6].tangent_mass = bitcast<f32>(cars[(((o+100u)+copy_6*22u)+14u)]);
+sim_car.contacts[copy_6].bias = bitcast<f32>(cars[(((o+100u)+copy_6*22u)+15u)]);
+sim_car.contacts[copy_6].bounce = bitcast<f32>(cars[(((o+100u)+copy_6*22u)+16u)]);
+sim_car.contacts[copy_6].friction = bitcast<f32>(cars[(((o+100u)+copy_6*22u)+17u)]);
+sim_car.contacts[copy_6].acc_normal = bitcast<f32>(cars[(((o+100u)+copy_6*22u)+18u)]);
+sim_car.contacts[copy_6].acc_tangent = bitcast<f32>(cars[(((o+100u)+copy_6*22u)+19u)]);
+sim_car.contacts[copy_6].acc_bias = bitcast<f32>(cars[(((o+100u)+copy_6*22u)+20u)]);
+sim_car.contacts[copy_6].acc_bias_center = bitcast<f32>(cars[(((o+100u)+copy_6*22u)+21u)]);
 }
 }
 
@@ -573,58 +579,58 @@ cars[(o+15u)] = bitcast<u32>(sim_car.boost_energy);
 cars[(o+16u)] = u32(sim_car.flags);
 cars[(o+17u)] = u32(sim_car.collision_count);
 cars[(o+18u)] = sim_car.tick.x; cars[(o+18u) + 1u] = sim_car.tick.y;
-for (var copy_7=0u; copy_7<4u+params.pad; copy_7=copy_7+1u) {
+for (var copy_7=0u; copy_7<5u+params.pad; copy_7=copy_7+1u) {
 cars[((o+20u)+copy_7*1u)] = bitcast<u32>(sim_car.wheel_angle[copy_7]);
 }
-for (var copy_8=0u; copy_8<4u+params.pad; copy_8=copy_8+1u) {
-cars[((o+24u)+copy_8*2u) + 0u] = bitcast<u32>(sim_car.wheel_previous[copy_8].x);
-cars[((o+24u)+copy_8*2u) + 1u] = bitcast<u32>(sim_car.wheel_previous[copy_8].y);
+for (var copy_8=0u; copy_8<5u+params.pad; copy_8=copy_8+1u) {
+cars[((o+25u)+copy_8*2u) + 0u] = bitcast<u32>(sim_car.wheel_previous[copy_8].x);
+cars[((o+25u)+copy_8*2u) + 1u] = bitcast<u32>(sim_car.wheel_previous[copy_8].y);
 }
-for (var copy_9=0u; copy_9<4u+params.pad; copy_9=copy_9+1u) {
-cars[((o+32u)+copy_9*1u)] = u32(sim_car.wheel_surface[copy_9]);
+for (var copy_9=0u; copy_9<5u+params.pad; copy_9=copy_9+1u) {
+cars[((o+35u)+copy_9*1u)] = u32(sim_car.wheel_surface[copy_9]);
 }
-cars[(o+36u)] = u32(sim_car.wheel_has_previous);
-cars[(o+37u)] = u32(sim_car.pair_count);
-cars[(o+38u)] = u32(sim_car.contact_count);
-cars[(o+39u)] = u32(sim_car.error);
-cars[(o+40u) + 0u] = bitcast<u32>(sim_car.shape_position.x);
-cars[(o+40u) + 1u] = bitcast<u32>(sim_car.shape_position.y);
-cars[(o+42u) + 0u] = bitcast<u32>(sim_car.shape_size.x);
-cars[(o+42u) + 1u] = bitcast<u32>(sim_car.shape_size.y);
-cars[(o+44u) + 0u] = bitcast<u32>(sim_car.leaf_min.x);
-cars[(o+44u) + 1u] = bitcast<u32>(sim_car.leaf_min.y);
-cars[(o+46u) + 0u] = bitcast<u32>(sim_car.leaf_max.x);
-cars[(o+46u) + 1u] = bitcast<u32>(sim_car.leaf_max.y);
+cars[(o+40u)] = u32(sim_car.wheel_has_previous);
+cars[(o+41u)] = u32(sim_car.pair_count);
+cars[(o+42u)] = u32(sim_car.contact_count);
+cars[(o+43u)] = u32(sim_car.error);
+cars[(o+44u) + 0u] = bitcast<u32>(sim_car.shape_position.x);
+cars[(o+44u) + 1u] = bitcast<u32>(sim_car.shape_position.y);
+cars[(o+46u) + 0u] = bitcast<u32>(sim_car.shape_size.x);
+cars[(o+46u) + 1u] = bitcast<u32>(sim_car.shape_size.y);
+cars[(o+48u) + 0u] = bitcast<u32>(sim_car.leaf_min.x);
+cars[(o+48u) + 1u] = bitcast<u32>(sim_car.leaf_min.y);
+cars[(o+50u) + 0u] = bitcast<u32>(sim_car.leaf_max.x);
+cars[(o+50u) + 1u] = bitcast<u32>(sim_car.leaf_max.y);
 for (var copy_10=0u; copy_10<16u+params.pad; copy_10=copy_10+1u) {
-cars[((o+48u)+copy_10*1u)] = u32(sim_car.pairs[copy_10]);
+cars[((o+52u)+copy_10*1u)] = u32(sim_car.pairs[copy_10]);
 }
 for (var copy_11=0u; copy_11<16u+params.pad; copy_11=copy_11+1u) {
-cars[((o+64u)+copy_11*2u) + 0u] = bitcast<u32>(sim_car.axes[copy_11].x);
-cars[((o+64u)+copy_11*2u) + 1u] = bitcast<u32>(sim_car.axes[copy_11].y);
+cars[((o+68u)+copy_11*2u) + 0u] = bitcast<u32>(sim_car.axes[copy_11].x);
+cars[((o+68u)+copy_11*2u) + 1u] = bitcast<u32>(sim_car.axes[copy_11].y);
 }
 for (var copy_12=0u; copy_12<32u+params.pad; copy_12=copy_12+1u) {
-cars[(((o+96u)+copy_12*22u)+0u) + 0u] = bitcast<u32>(sim_car.contacts[copy_12].normal.x);
-cars[(((o+96u)+copy_12*22u)+0u) + 1u] = bitcast<u32>(sim_car.contacts[copy_12].normal.y);
-cars[(((o+96u)+copy_12*22u)+2u) + 0u] = bitcast<u32>(sim_car.contacts[copy_12].point.x);
-cars[(((o+96u)+copy_12*22u)+2u) + 1u] = bitcast<u32>(sim_car.contacts[copy_12].point.y);
-cars[(((o+96u)+copy_12*22u)+4u) + 0u] = bitcast<u32>(sim_car.contacts[copy_12].wall_point.x);
-cars[(((o+96u)+copy_12*22u)+4u) + 1u] = bitcast<u32>(sim_car.contacts[copy_12].wall_point.y);
-cars[(((o+96u)+copy_12*22u)+6u) + 0u] = bitcast<u32>(sim_car.contacts[copy_12].local_point.x);
-cars[(((o+96u)+copy_12*22u)+6u) + 1u] = bitcast<u32>(sim_car.contacts[copy_12].local_point.y);
-cars[(((o+96u)+copy_12*22u)+8u) + 0u] = bitcast<u32>(sim_car.contacts[copy_12].wall_local_point.x);
-cars[(((o+96u)+copy_12*22u)+8u) + 1u] = bitcast<u32>(sim_car.contacts[copy_12].wall_local_point.y);
-cars[(((o+96u)+copy_12*22u)+10u)] = bitcast<u32>(sim_car.contacts[copy_12].depth);
-cars[(((o+96u)+copy_12*22u)+11u)] = u32(sim_car.contacts[copy_12].shape);
-cars[(((o+96u)+copy_12*22u)+12u)] = u32(sim_car.contacts[copy_12].flags);
-cars[(((o+96u)+copy_12*22u)+13u)] = bitcast<u32>(sim_car.contacts[copy_12].normal_mass);
-cars[(((o+96u)+copy_12*22u)+14u)] = bitcast<u32>(sim_car.contacts[copy_12].tangent_mass);
-cars[(((o+96u)+copy_12*22u)+15u)] = bitcast<u32>(sim_car.contacts[copy_12].bias);
-cars[(((o+96u)+copy_12*22u)+16u)] = bitcast<u32>(sim_car.contacts[copy_12].bounce);
-cars[(((o+96u)+copy_12*22u)+17u)] = bitcast<u32>(sim_car.contacts[copy_12].friction);
-cars[(((o+96u)+copy_12*22u)+18u)] = bitcast<u32>(sim_car.contacts[copy_12].acc_normal);
-cars[(((o+96u)+copy_12*22u)+19u)] = bitcast<u32>(sim_car.contacts[copy_12].acc_tangent);
-cars[(((o+96u)+copy_12*22u)+20u)] = bitcast<u32>(sim_car.contacts[copy_12].acc_bias);
-cars[(((o+96u)+copy_12*22u)+21u)] = bitcast<u32>(sim_car.contacts[copy_12].acc_bias_center);
+cars[(((o+100u)+copy_12*22u)+0u) + 0u] = bitcast<u32>(sim_car.contacts[copy_12].normal.x);
+cars[(((o+100u)+copy_12*22u)+0u) + 1u] = bitcast<u32>(sim_car.contacts[copy_12].normal.y);
+cars[(((o+100u)+copy_12*22u)+2u) + 0u] = bitcast<u32>(sim_car.contacts[copy_12].point.x);
+cars[(((o+100u)+copy_12*22u)+2u) + 1u] = bitcast<u32>(sim_car.contacts[copy_12].point.y);
+cars[(((o+100u)+copy_12*22u)+4u) + 0u] = bitcast<u32>(sim_car.contacts[copy_12].wall_point.x);
+cars[(((o+100u)+copy_12*22u)+4u) + 1u] = bitcast<u32>(sim_car.contacts[copy_12].wall_point.y);
+cars[(((o+100u)+copy_12*22u)+6u) + 0u] = bitcast<u32>(sim_car.contacts[copy_12].local_point.x);
+cars[(((o+100u)+copy_12*22u)+6u) + 1u] = bitcast<u32>(sim_car.contacts[copy_12].local_point.y);
+cars[(((o+100u)+copy_12*22u)+8u) + 0u] = bitcast<u32>(sim_car.contacts[copy_12].wall_local_point.x);
+cars[(((o+100u)+copy_12*22u)+8u) + 1u] = bitcast<u32>(sim_car.contacts[copy_12].wall_local_point.y);
+cars[(((o+100u)+copy_12*22u)+10u)] = bitcast<u32>(sim_car.contacts[copy_12].depth);
+cars[(((o+100u)+copy_12*22u)+11u)] = u32(sim_car.contacts[copy_12].shape);
+cars[(((o+100u)+copy_12*22u)+12u)] = u32(sim_car.contacts[copy_12].flags);
+cars[(((o+100u)+copy_12*22u)+13u)] = bitcast<u32>(sim_car.contacts[copy_12].normal_mass);
+cars[(((o+100u)+copy_12*22u)+14u)] = bitcast<u32>(sim_car.contacts[copy_12].tangent_mass);
+cars[(((o+100u)+copy_12*22u)+15u)] = bitcast<u32>(sim_car.contacts[copy_12].bias);
+cars[(((o+100u)+copy_12*22u)+16u)] = bitcast<u32>(sim_car.contacts[copy_12].bounce);
+cars[(((o+100u)+copy_12*22u)+17u)] = bitcast<u32>(sim_car.contacts[copy_12].friction);
+cars[(((o+100u)+copy_12*22u)+18u)] = bitcast<u32>(sim_car.contacts[copy_12].acc_normal);
+cars[(((o+100u)+copy_12*22u)+19u)] = bitcast<u32>(sim_car.contacts[copy_12].acc_tangent);
+cars[(((o+100u)+copy_12*22u)+20u)] = bitcast<u32>(sim_car.contacts[copy_12].acc_bias);
+cars[(((o+100u)+copy_12*22u)+21u)] = bitcast<u32>(sim_car.contacts[copy_12].acc_bias_center);
 }
 }
 
@@ -728,10 +734,10 @@ sim_car.boost_energy = bitcast<f32>(cars[(o+15u)]);
 sim_car.flags = cars[(o+16u)];
 sim_car.collision_count = cars[(o+17u)];
 sim_car.tick = U64(cars[(o+18u)], cars[(o+18u) + 1u]);
-for (var copy_17=0u; copy_17<4u+params.pad; copy_17=copy_17+1u) {
+for (var copy_17=0u; copy_17<5u+params.pad; copy_17=copy_17+1u) {
 sim_car.wheel_angle[copy_17] = bitcast<f32>(cars[((o+20u)+copy_17*1u)]);
 }
-sim_car.error = cars[(o+39u)];
+sim_car.error = cars[(o+43u)];
 }
 
 fn load_StepCarry(o: u32) -> StepCarry { return StepCarry(vec2<f32>(bitcast<f32>(results[(o + 0u) + 0u]), bitcast<f32>(results[(o + 0u) + 1u])), vec2<f32>(bitcast<f32>(results[(o + 2u) + 0u]), bitcast<f32>(results[(o + 2u) + 1u])), vec2<f32>(bitcast<f32>(results[(o + 4u) + 0u]), bitcast<f32>(results[(o + 4u) + 1u])), bitcast<f32>(results[(o + 6u)]), bitcast<f32>(results[(o + 7u)]), results[(o + 8u)], results[(o + 9u)]); }

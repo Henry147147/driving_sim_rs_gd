@@ -1,0 +1,24 @@
+{
+  "scene": "wasm/test/scenarios/rally_mixed.scene.json",
+  "vehicleTemplate": "assets/scenes/snowmobile_template.json",
+  "network": "assets/networks/formula.json",
+  "model": "assets/models/formula.json",
+  "options": {
+    "population": 17,
+    "seed": 5,
+    "batchCount": 2,
+    "mathProfile": "proton",
+    "eliminateOnWall": false,
+    "eliminateWhenIdle": false,
+    "settings": { "selection_size": 3 },
+    "spawn": { "position": [7680, 2432], "rotation": 1.5707963705062866 }
+  },
+  "shape": [20, 16, 5],
+  "steps": [
+    { "advance": 1 },
+    { "advance": 37 },
+    { "advance": 562 },
+    { "nextGeneration": true },
+    { "advance": 600 }
+  ]
+}

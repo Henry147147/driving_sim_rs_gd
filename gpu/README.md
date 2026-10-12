@@ -39,7 +39,7 @@ Each library contains `proton`, `win10-fma3` and `win11-fma3`; a build selects G
 
 ## NVIDIA (CUDA)
 
-The same sources build for NVIDIA GPUs with `nvcc`; `sim/compat.h` maps the HIP runtime calls and warp helpers to CUDA. HIP and CUDA use the same library ABI and checkpoint formats: `--gpu`, `gpu-info` and `backend: "hip"` use whichever library is loaded. Math profiles require simulator ABI 10, so rebuild older libraries. Install the CUDA toolkit (13.x tested) and a host compiler (Visual Studio Build Tools on Windows, gcc or clang on Linux), then build from the repository root:
+The same sources build for NVIDIA GPUs with `nvcc`; `sim/compat.h` maps the HIP runtime calls and warp helpers to CUDA. HIP and CUDA use the same library ABI and checkpoint formats: `--gpu`, `gpu-info` and `backend: "hip"` use whichever library is loaded. Five-wheel vehicles, including Snowmobile, require simulator ABI 11; rebuild the library and Rust executable together. Install the CUDA toolkit (13.x tested) and a host compiler (Visual Studio Build Tools on Windows, gcc or clang on Linux), then build from the repository root:
 
 ```sh
 gpu/build-cuda.sh                  # Linux, writes target/gpu/libaltd_gpu.so

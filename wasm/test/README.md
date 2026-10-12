@@ -13,3 +13,13 @@ cargo run --release --offline --example wasm_reference -- --generate-fixtures
 `benchmark.network.json` is Xavier initialization of shape `20,16,16,16,16,12,12,8,5` with PyRandom seed 1 and Rally input/output names. `tools/benchmark.py` uses it with the mixed Rally scene and its spawn file. Inputs are packaged only in the repository test tree; Cargo packaging excludes this directory.
 
 The native reference example accepts a scenario and output path to capture new observations into `target/` for comparison before updating tracked references. Expanded threaded observations go to `target/wasm-thread-reference.json`. Division fixtures are generated separately and are not checked in.
+
+`scenarios/snowmobile-gpu.json` reuses the mixed Rally geometry with the public
+Snowmobile vehicle and physics template. It compares browser CPU and WebGPU
+windows, turnover, restored checkpoints and population resizing directly,
+without a saved reference. After `wasm/build.sh`, run:
+
+```sh
+PAGE=full-sim.html SCENARIO=wasm/test/scenarios/snowmobile-gpu.json \
+  VERIFY_SIM=1 GPU=hardware node wasm/test/run.mjs
+```
