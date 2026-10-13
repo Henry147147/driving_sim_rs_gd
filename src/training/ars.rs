@@ -16,12 +16,13 @@
 //! `alpha / (b * nu) * sum (r+ - r-) * d`. If those scores are all alike the
 //! step is skipped.
 //!
-//! Each head adapts its own `alpha`. Every `alpha_adapt_every` generations the
-//! fast and slow moving averages of its search point's raw reward are
-//! compared: a clearly rising trend multiplies `alpha` by `alpha_adapt_up`, a
-//! clearly falling one by `alpha_adapt_down`, within `[alpha_min, alpha_max]`.
-//! The raw reward (`raw_reward_values`) is used because ranks cannot be
-//! compared across generations.
+//! Each head adapts its own `alpha`. Every `alpha_adapt_every` generations,
+//! once the head has `alpha_adapt_warmup` readings, the fast and slow moving
+//! averages of its search point's raw reward are compared: a clearly rising
+//! trend multiplies `alpha` by `alpha_adapt_up`, a plateau or a falling one by
+//! `alpha_adapt_down`, within `[alpha_min, alpha_max]`. The raw reward
+//! (`raw_reward_values`, or `Fitness::raw` when the caller evaluated several
+//! tracks) is used because ranks cannot be compared across generations.
 //!
 //! The elite pool needs no such comparison: its members are in every
 //! population, and the next pool is the best distinct cars of that
@@ -32,7 +33,7 @@ use super::TrainingRandom;
 use crate::math::profile::MathProfile;
 use crate::nn::network::{parameter_count, Network};
 use crate::training::evolution::{
-    raw_reward_values, reward_values, AgentResult, ArsSettings, EvolutionSettings, Generation,
+    raw_reward_values, reward_values, AgentResult, ArsSettings, EvolutionSettings, Fitness, Generation,
 };
 use rayon::prelude::*;
 
@@ -54,18 +55,31 @@ pub(crate) fn validate(s: &ArsSettings, population: usize) -> Result<(), String>
     if !positive(s.alpha_min) || !positive(s.alpha_max) || s.alpha_min > s.alpha_max {
         return Err("ars alpha_min and alpha_max must be positive, with alpha_min <= alpha_max".into());
     }
+    if !(s.alpha_min..=s.alpha_max).contains(&s.alpha) {
+        return Err(format!(
+            "ars alpha {} must be within alpha_min {} and alpha_max {}",
+            s.alpha, s.alpha_min, s.alpha_max
+        ));
+    }
     if s.alpha_adapt_every == 0 {
         return Err("ars alpha_adapt_every must be at least 1".into());
     }
     let decay = |x: f64| x > 0.0 && x <= 1.0;
-    if !decay(s.alpha_adapt_fast) || !decay(s.alpha_adapt_slow) {
-        return Err("ars alpha_adapt_fast and alpha_adapt_slow must be in (0, 1]".into());
+    if !decay(s.alpha_adapt_fast) || !decay(s.alpha_adapt_slow) || s.alpha_adapt_fast <= s.alpha_adapt_slow {
+        return Err(
+            "ars alpha_adapt_fast and alpha_adapt_slow must be in (0, 1], with alpha_adapt_fast > alpha_adapt_slow"
+                .into(),
+        );
+    }
+    // Both averages are the same mean until the fast one spans its window.
+    if f64::from(s.alpha_adapt_warmup) * s.alpha_adapt_fast <= 1.0 {
+        return Err("ars alpha_adapt_warmup must exceed 1 / alpha_adapt_fast, the readings before the fast average leads the slow one".into());
     }
     if !s.alpha_adapt_threshold.is_finite() || s.alpha_adapt_threshold < 0.0 {
         return Err("ars alpha_adapt_threshold must be 0 or positive".into());
     }
-    if !positive(s.alpha_adapt_up) || !positive(s.alpha_adapt_down) {
-        return Err("ars alpha_adapt_up and alpha_adapt_down must be positive".into());
+    if !(s.alpha_adapt_up.is_finite() && s.alpha_adapt_up >= 1.0 && decay(s.alpha_adapt_down)) {
+        return Err("ars alpha_adapt_up must be at least 1 and alpha_adapt_down in (0, 1]".into());
     }
     if population < s.elite_count.saturating_add(s.heads.saturating_mul(3)) {
         return Err(format!(
@@ -109,6 +123,8 @@ pub(crate) struct Head {
     pub(crate) slow: Option<f64>,
     /// Generations since the last trend check.
     pub(crate) since_check: u32,
+    /// Finite rewards taken into the averages so far.
+    pub(crate) readings: u32,
 }
 
 impl Head {
@@ -119,30 +135,40 @@ impl Head {
             fast: None,
             slow: None,
             since_check: 0,
+            readings: 0,
         }
     }
 
     /// Takes in the raw reward of this generation's search point and, on
-    /// every `alpha_adapt_every`-th call, moves the step size along the trend.
-    /// A reward that is not finite (a missing metric) leaves the averages alone.
+    /// every `alpha_adapt_every`-th call once `alpha_adapt_warmup` rewards
+    /// are in, moves the step size: up while the reward clearly rises, down
+    /// on a plateau or a fall. A reward that is not finite leaves the
+    /// averages alone.
     fn adapt(&mut self, reward: f64, ars: &ArsSettings) {
         let bound = |alpha: f64| alpha.clamp(ars.alpha_min, ars.alpha_max);
         let mut alpha = bound(self.alpha.unwrap_or(ars.alpha));
         if reward.is_finite() {
-            let blend = |old: Option<f64>, decay: f64| Some(old.map_or(reward, |e| (1.0 - decay) * e + decay * reward));
+            self.readings = self.readings.saturating_add(1);
+            // A plain mean of the readings until they span the average's window.
+            let mean = 1.0 / f64::from(self.readings);
+            let blend = |old: Option<f64>, decay: f64| {
+                let decay = decay.max(mean);
+                Some(old.map_or(reward, |e| (1.0 - decay) * e + decay * reward))
+            };
             self.fast = blend(self.fast, ars.alpha_adapt_fast);
             self.slow = blend(self.slow, ars.alpha_adapt_slow);
         }
         self.since_check += 1;
         if self.since_check >= ars.alpha_adapt_every {
             self.since_check = 0;
-            if let (Some(fast), Some(slow)) = (self.fast, self.slow) {
-                let (trend, band) = (fast - slow, ars.alpha_adapt_threshold * slow.abs());
-                if trend > band {
-                    alpha = bound(alpha * ars.alpha_adapt_up);
-                } else if trend < -band {
-                    alpha = bound(alpha * ars.alpha_adapt_down);
-                }
+            if let (Some(fast), Some(slow), true) = (self.fast, self.slow, self.readings >= ars.alpha_adapt_warmup) {
+                let rising = fast - slow > ars.alpha_adapt_threshold * slow.abs();
+                let factor = if rising {
+                    ars.alpha_adapt_up
+                } else {
+                    ars.alpha_adapt_down
+                };
+                alpha = bound(alpha * factor);
             }
         }
         self.alpha = Some(alpha);
@@ -342,13 +368,19 @@ impl Ars {
             && self.deltas.len() == layout.pairs * self.heads[0].theta.len()
     }
 
-    /// The new elite pool and the step of `theta`, from the scored population.
-    fn learn(&mut self, agents: &[AgentResult], scores: &[f64], settings: &EvolutionSettings) {
+    /// The new elite pool and the step of `theta`, from the scored
+    /// population. `raw` are the cars' raw rewards when the caller evaluated
+    /// them; the search points' rewards are read from `agents` otherwise.
+    fn learn(&mut self, agents: &[AgentResult], scores: &[f64], raw: Option<&[f64]>, settings: &EvolutionSettings) {
         let Layout {
             elites, heads, pairs, ..
         } = self.layout.expect("learn follows sample");
         let ars = &settings.ars;
-        let raw = raw_reward_values(agents, &settings.rewards);
+        let points = elites..elites + heads;
+        let raw = match raw {
+            Some(raw) => raw[points].to_vec(),
+            None => raw_reward_values(&agents[points], &settings.rewards),
+        };
 
         let mut order: Vec<usize> = (0..agents.len()).collect();
         order.sort_by(|&a, &b| scores[b].partial_cmp(&scores[a]).unwrap_or(std::cmp::Ordering::Equal));
@@ -369,9 +401,8 @@ impl Ars {
 
         // Probe i is at `elites + heads + 2i` (plus side) and the next slot (minus side).
         let n = self.heads[0].theta.len();
-        for h in 0..heads {
-            let head = &mut self.heads[h];
-            head.adapt(raw[elites + h], ars);
+        for (h, (head, reward)) in self.heads.iter_mut().zip(raw).enumerate() {
+            head.adapt(reward, ars);
             let (start, count) = pair_range(pairs, heads, h);
             if count == 0 {
                 continue;
@@ -455,6 +486,15 @@ impl Optimizer for Ars {
         self.deltas.clear();
     }
 
+    fn step_sizes(&self, settings: &EvolutionSettings) -> Option<Vec<f64>> {
+        (!self.heads.is_empty()).then(|| {
+            self.heads
+                .iter()
+                .map(|h| h.alpha.unwrap_or(settings.ars.alpha))
+                .collect()
+        })
+    }
+
     fn start(
         &mut self,
         seed: &Network,
@@ -481,16 +521,19 @@ impl Optimizer for Ars {
     fn next(
         &mut self,
         agents: &[AgentResult],
-        scores: Option<Vec<f64>>,
+        fitness: Option<Fitness>,
         settings: &EvolutionSettings,
         rng: &mut TrainingRandom,
         _scratch: &mut Vec<f64>,
         math: MathProfile,
         trace: bool,
     ) -> Produced {
-        let scores = scores.unwrap_or_else(|| reward_values(agents, &settings.rewards));
+        let (scores, raw) = match fitness {
+            Some(Fitness { scores, raw }) => (scores, Some(raw)),
+            None => (reward_values(agents, &settings.rewards), None),
+        };
         if self.matches(agents) {
-            self.learn(agents, &scores, settings);
+            self.learn(agents, &scores, raw.as_deref(), settings);
         } else {
             // A new run, a restored population or a changed population size:
             // the directions no longer belong to these cars. Search on from

@@ -167,7 +167,7 @@ pub(super) fn train(
             if track_count == 1 {
                 runner.next_generation();
             } else {
-                runner.next_generation_with_fitness(summary.fitness);
+                runner.next_generation_with_fitness(summary.turnover_fitness());
             }
         }
     }

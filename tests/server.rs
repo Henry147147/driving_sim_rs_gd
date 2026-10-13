@@ -537,6 +537,45 @@ fn json_and_binary_checkpoints_resume_the_same_population_and_rng() {
 }
 
 #[test]
+fn ars_alphas_report_each_heads_step_size() {
+    let address = start();
+    let mut ga = Client::connect(address);
+    ga.create(&json!({"population": 8}));
+    ga.call("startWithShape", json!({"shape": [20, 8, 5]}));
+    assert_eq!(ga.call("arsAlphas", Value::Null), Value::Null);
+
+    let options = json!({"population": 16, "seed": 3, "settings": {"algorithm": "ars", "ars": {
+        "elite_count": 2, "heads": 2, "alpha": 0.1, "alpha_adapt_every": 1, "alpha_adapt_warmup": 6,
+    }}});
+    let mut client = Client::connect(address);
+    client.create(&options);
+    assert_eq!(
+        client.call("arsAlphas", Value::Null),
+        Value::Null,
+        "no heads before the start"
+    );
+    client.call("startWithShape", json!({"shape": [20, 8, 5]}));
+    assert_eq!(client.call("arsAlphas", Value::Null), json!([0.1, 0.1]));
+    let mut session = direct(&options);
+    session.start_with_shape(&[20, 8, 5]).unwrap();
+    for _ in 0..8 {
+        client.call("advanceGeneration", json!({"timeLimitTicks": 30}));
+        client.call("nextGeneration", Value::Null);
+        session.advance_generation(30).unwrap();
+        session.next_generation().unwrap();
+        assert_eq!(
+            client.call("arsAlphas", Value::Null),
+            json!(session.ars_alphas().unwrap())
+        );
+    }
+    let alphas = session.ars_alphas().unwrap();
+    assert!(
+        alphas.iter().all(|&a| a != 0.1),
+        "past the warm-up every check moves alpha: {alphas:?}"
+    );
+}
+
+#[test]
 fn pipelined_requests_execute_in_order_and_keep_their_ids() {
     let mut client = Client::connect(start());
     client.create(&json!({"population": 4}));
@@ -1124,8 +1163,8 @@ fn malformed_nested_inputs_return_errors_without_aborting_cli() {
     let size = ars.runner.agents[0].network.params.len();
     let floats_at = (40 + 4 * word(3) + word(4)).next_multiple_of(8);
     let theta_at = floats_at + 16;
-    // One head: its parameters, then four words of step size state.
-    let elite_at = theta_at + (size + 4) * 8;
+    // One head: its parameters, then five words of step size state.
+    let elite_at = theta_at + (size + 5) * 8;
     let score_at = elite_at + size * 8;
     let (reply, _) = ars_client.call_raw("restoreCheckpointBytes", Value::Null, Some(&bytes));
     assert!(reply.get("error").is_none(), "{reply}");

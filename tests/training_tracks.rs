@@ -227,9 +227,12 @@ fn scored_single_track_turnover_preserves_both_rng_backends() {
         }
         a.advance_generation(30);
         b.advance_generation(30);
-        let scores = altd_sim::training::evolution::reward_values(&b.results(), &b.settings.rewards);
+        let fitness = altd_sim::training::evolution::Fitness {
+            scores: altd_sim::training::evolution::reward_values(&b.results(), &b.settings.rewards),
+            raw: altd_sim::training::evolution::raw_reward_values(&b.results(), &b.settings.rewards),
+        };
         let original = a.next_generation();
-        let scored = b.next_generation_with_fitness(scores);
+        let scored = b.next_generation_with_fitness(fitness);
         assert_eq!(original.networks, scored.networks);
         assert_eq!(original.rewards, scored.rewards);
         assert_eq!(a.rng.to_json(), b.rng.to_json());
@@ -289,8 +292,10 @@ fn gpu_track_batches_match_cpu_and_only_advance_evolution_after_all_tracks() {
         }
         let (a, b) = (a.finish(), b.finish());
         assert_eq!(a.fitness, b.fitness);
-        cpu.next_generation_with_fitness(a.fitness);
-        on_gpu.next_generation_gpu_with_fitness(&mut sim, b.fitness).unwrap();
+        cpu.next_generation_with_fitness(a.turnover_fitness());
+        on_gpu
+            .next_generation_gpu_with_fitness(&mut sim, b.turnover_fitness())
+            .unwrap();
         assert_eq!(cpu.generation, generation + 1);
         assert_eq!(cpu.rng.to_json(), on_gpu.rng.to_json());
         for (a, b) in cpu.agents.iter().zip(&on_gpu.agents) {

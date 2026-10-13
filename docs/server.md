@@ -73,9 +73,12 @@ A successful reply contains the same `id`, its result in `ok` and the current `s
 | `setEvolutionSettings` | `json` as an evolution-settings JSON string; `algorithm` is `"ga"` or `"ars"` (see design notes) | `null` |
 | `replaceTrack` | `scene` as a scene JSON string | `null` |
 | `generationSummary` | None | `{bestIndex, bestScore, lapped, active, lapIndex, lapTime}`, optional `averageScore` and `worstScore` |
+| `arsAlphas` | None | Each ARS head's current step size as an array in head order, or `null` unless ARS runs |
 | `networkJson` | `index` | Network JSON string |
 | `carStates` | None | Number of `f64` values, with a binary payload |
 | `checkpointBytes` | None | `null`, with a binary payload |
+
+`arsAlphas` reads each head's adapted `alpha` (see the ARS design notes): the step size its last step used, or the configured `ars.alpha` before its first step. The result is `null` for GA sessions, before a start, after switching to ARS until the next `nextGeneration`, and after restoring a checkpoint without ARS search state until the next `nextGeneration`.
 
 Call `create` once, then start or restore before advancing. `options.backend` accepts `"cpu"`, the default, or `"hip"`. `options.mathProfile` accepts `"proton"`, `"win10-fma3"` or `"win11-fma3"` and defaults to the server's profile; checkpoints restore only into sessions of the profile they were made with. Other SessionOptions fields retain their regular defaults and unknown fields are rejected. A second successful `create` on the same connection is an error. Unknown operations and malformed JSON return errors while leaving the connection usable.
 

@@ -115,7 +115,8 @@ impl AgentResult<'_> {
 pub struct ArsSettings {
     /// Standard deviation of the probe noise: probes are `theta +- nu * delta`.
     pub nu: f64,
-    /// Step size of the search point.
+    /// Starting step size of each head, within `[alpha_min, alpha_max]`;
+    /// fixed while ARS runs.
     pub alpha: f64,
     /// Fraction of the antithetic pairs, best first, that steer the step.
     pub top_frac: f64,
@@ -130,13 +131,18 @@ pub struct ArsSettings {
     pub alpha_max: f64,
     /// Generations between two trend checks of a head.
     pub alpha_adapt_every: u32,
-    /// Decay of the fast and slow averages of the search point's reward.
+    /// Readings of a head's reward before its first trend check.
+    pub alpha_adapt_warmup: u32,
+    /// Decay of the fast and slow averages of the search point's reward;
+    /// the fast one decays more. Until a head has `1 / decay` readings an
+    /// average is the plain mean of them.
     pub alpha_adapt_fast: f64,
     pub alpha_adapt_slow: f64,
-    /// How far the fast average must be from the slow one, as a fraction of
-    /// the slow one's size, before the step size moves.
+    /// How far the fast average must rise above the slow one, as a fraction
+    /// of the slow one's size, to count as improving.
     pub alpha_adapt_threshold: f64,
-    /// Step size factors for an improving and for a regressing trend.
+    /// Step size factors for an improving trend (at least 1) and for a
+    /// plateau or a regressing one (at most 1).
     pub alpha_adapt_up: f64,
     pub alpha_adapt_down: f64,
 }
@@ -153,8 +159,9 @@ impl Default for ArsSettings {
             alpha_min: 0.005,
             alpha_max: 0.5,
             alpha_adapt_every: 10,
-            alpha_adapt_fast: 0.1,
-            alpha_adapt_slow: 0.01,
+            alpha_adapt_warmup: 20,
+            alpha_adapt_fast: 0.2,
+            alpha_adapt_slow: 0.05,
             alpha_adapt_threshold: 0.01,
             alpha_adapt_up: 1.1,
             alpha_adapt_down: 0.8,
@@ -348,6 +355,7 @@ impl EvolutionSettings {
                 "alpha_min": ars.alpha_min,
                 "alpha_max": ars.alpha_max,
                 "alpha_adapt_every": ars.alpha_adapt_every,
+                "alpha_adapt_warmup": ars.alpha_adapt_warmup,
                 "alpha_adapt_fast": ars.alpha_adapt_fast,
                 "alpha_adapt_slow": ars.alpha_adapt_slow,
                 "alpha_adapt_threshold": ars.alpha_adapt_threshold,
@@ -433,9 +441,20 @@ pub fn reward_values(agents: &[AgentResult], specs: &[RewardSpec]) -> Vec<f64> {
     result
 }
 
+/// Rewards a caller evaluated itself, one per car in population order, such
+/// as the means over a batch of tracks (`BatchEvaluation`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fitness {
+    /// What selection and the ARS step go by (like `reward_values`).
+    pub scores: Vec<f64>,
+    /// The same evaluation as raw rewards (like `raw_reward_values`), which
+    /// ARS compares across generations to adapt its step size.
+    pub raw: Vec<f64>,
+}
+
 /// Each car's reward as the weighted mean of its raw metric values, which
-/// unlike `reward_values` can be compared across generations; NaN when a
-/// metric is missing.
+/// unlike `reward_values` can be compared across generations. A missing
+/// metric adds nothing, as it does in `reward_values`.
 pub fn raw_reward_values(agents: &[AgentResult], specs: &[RewardSpec]) -> Vec<f64> {
     let total_weight: i64 = specs.iter().map(|s| s.weight.abs()).sum();
     if total_weight == 0 {
@@ -446,11 +465,11 @@ pub fn raw_reward_values(agents: &[AgentResult], specs: &[RewardSpec]) -> Vec<f6
         .map(|a| {
             specs
                 .iter()
-                .try_fold(0.0, |sum, spec| {
+                .map(|spec| {
                     a.value(spec)
-                        .map(|v| sum + v * (spec.weight as f64 / total_weight as f64))
+                        .map_or(0.0, |v| v * (spec.weight as f64 / total_weight as f64))
                 })
-                .unwrap_or(f64::NAN)
+                .sum()
         })
         .collect()
 }

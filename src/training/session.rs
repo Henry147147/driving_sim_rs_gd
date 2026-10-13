@@ -499,13 +499,28 @@ impl Session {
     /// Change the settings used by the next reproduction without resetting
     /// cars, generation statistics or the training RNG. Population changes
     /// take effect when `next_generation` installs the new population.
+    /// `ars.alpha` only seeds each head's adapted step size, so it is fixed
+    /// while ARS runs.
     #[cfg(any(test, feature = "server", all(target_arch = "wasm32", feature = "wasm")))]
     pub fn set_evolution_settings(&mut self, text: &str) -> Result<(), String> {
         let settings: EvolutionSettings =
             serde_json::from_str(text).map_err(|e| format!("invalid evolution settings: {e}"))?;
         settings.validate()?;
+        if self.started()
+            && self.runner.optimizer.name() == "ars"
+            && settings.ars.alpha != self.runner.settings.ars.alpha
+        {
+            return Err("ars alpha cannot change while ARS runs; each head adapts its own step size within alpha_min and alpha_max".into());
+        }
         self.runner.settings = settings;
         Ok(())
+    }
+
+    /// Each ARS head's step size in head order: the one its last step used,
+    /// or `ars.alpha` before its first step. `None` unless ARS runs and has
+    /// search points.
+    pub fn ars_alphas(&self) -> Option<Vec<f64>> {
+        self.runner.optimizer.step_sizes(&self.runner.settings)
     }
 
     /// `CAR_STATE_STRIDE` values per car (`training::CAR_STATE_FIELDS`).
@@ -1202,7 +1217,8 @@ fn read_parents(bytes: &[u8]) -> Result<(u64, Lineage), String> {
 /// count K and head count H; the u32 shape; the RNG JSON; zero padding to a
 /// multiple of 8 bytes; f64 nu and max weight; for each head its f64
 /// parameters, then its step size, fast and slow reward averages (NaN while
-/// unset) and its generations since the last trend check; then each of the E
+/// unset), its generations since the last trend check and its reward
+/// readings so far; then each of the E
 /// pool members' f64 parameters followed by its f64 score. Words 0 to 4 sit
 /// where formats 1 and 2 have them. Format 3 has no head count word (one
 /// head) and only the parameters of the search point.
@@ -1224,7 +1240,7 @@ fn ars_bytes(generation: u64, tick: u64, r: &ArsRecord) -> Result<Vec<u8>, Strin
         8 + 4 * (header.len() + r.shape.len())
             + rng.len()
             + 24
-            + (r.heads.len() * (size + 4) + r.pool.len() * (size + 1)) * 8,
+            + (r.heads.len() * (size + 5) + r.pool.len() * (size + 1)) * 8,
     );
     out.extend_from_slice(ARS_MAGIC);
     for n in header.into_iter().chain(r.shape.iter().map(|&n| n as u64)) {
@@ -1245,7 +1261,9 @@ fn ars_bytes(generation: u64, tick: u64, r: &ArsRecord) -> Result<Vec<u8>, Strin
         for x in [h.alpha, h.fast, h.slow] {
             out.extend_from_slice(&x.unwrap_or(f64::NAN).to_le_bytes());
         }
-        out.extend_from_slice(&f64::from(h.since_check).to_le_bytes());
+        for n in [h.since_check, h.readings] {
+            out.extend_from_slice(&f64::from(n).to_le_bytes());
+        }
     }
     for e in &r.pool {
         for p in &e.params {
@@ -1294,7 +1312,7 @@ fn read_ars(bytes: &[u8]) -> Result<(u64, ArsRecord), String> {
     let size = checked_parameter_count(&shape).ok_or_else(invalid)?;
     let data = bytes.get(floats_at..).ok_or_else(invalid)?;
     // nu and max weight, the search points with their step size state, then the pool members and their scores.
-    let per_head = size.checked_add(if v3 { 0 } else { 4 }).ok_or_else(invalid)?;
+    let per_head = size.checked_add(if v3 { 0 } else { 5 }).ok_or_else(invalid)?;
     let expected = pool_len
         .checked_mul(size.checked_add(1).ok_or_else(invalid)?)
         .and_then(|n| n.checked_add(head_count.checked_mul(per_head)?))
@@ -1320,19 +1338,23 @@ fn read_ars(bytes: &[u8]) -> Result<(u64, ArsRecord), String> {
                     fast: None,
                     slow: None,
                     since_check: 0,
+                    readings: 0,
                 });
             }
-            let state = take(4);
-            let since_check = u32::try_from(state[3] as u64)
-                .ok()
-                .filter(|&n| f64::from(n) == state[3])
-                .ok_or("the checkpoint's trend check counter is out of range")?;
+            let state = take(5);
+            let count = |x: f64| {
+                u32::try_from(x as u64)
+                    .ok()
+                    .filter(|&n| f64::from(n) == x)
+                    .ok_or("the checkpoint's trend check counters are out of range")
+            };
             Ok(Head {
                 theta,
                 alpha: known(state[0]),
                 fast: known(state[1]),
                 slow: known(state[2]),
-                since_check,
+                since_check: count(state[3])?,
+                readings: count(state[4])?,
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -1762,9 +1784,9 @@ mod tests {
         v3.extend_from_slice(&v4[8 + 32..rng_end]);
         v3.resize(v3.len().next_multiple_of(8), 0);
         let floats_at = rng_end.next_multiple_of(8);
-        // nu and max weight, the point, then the pool; skip the four step size words.
+        // nu and max weight, the point, then the pool; skip the five step size words.
         v3.extend_from_slice(&v4[floats_at..floats_at + (2 + size) * 8]);
-        v3.extend_from_slice(&v4[floats_at + (2 + size + 4) * 8..]);
+        v3.extend_from_slice(&v4[floats_at + (2 + size + 5) * 8..]);
         let mut t = generated_session(ARS_OPTIONS);
         t.restore_checkpoint_bytes(&v3).unwrap();
         assert_eq!(t.checkpoint().unwrap(), s.checkpoint().unwrap());
@@ -1870,6 +1892,32 @@ mod tests {
             .set_evolution_settings(r#"{"algorithm": "ars", "population": 20, "ars": {"bogus": 1}}"#)
             .is_err());
         s.set_evolution_settings(r#"{"algorithm": "ars", "population": 20}"#)
+            .unwrap();
+    }
+
+    /// Each head adapts its own step size from `ars.alpha`, so the setting is
+    /// fixed while ARS runs and free again once the GA has taken over.
+    #[test]
+    fn ars_alpha_cannot_change_while_ars_runs() {
+        let mut s = generated_session(ARS_OPTIONS);
+        s.set_evolution_settings(r#"{"algorithm": "ars", "population": 16, "ars": {"elite_count": 2, "alpha": 0.1}}"#)
+            .unwrap();
+        s.start_with_shape(&[20, 8, 5]).unwrap();
+        let err = s
+            .set_evolution_settings(
+                r#"{"algorithm": "ars", "population": 16, "ars": {"elite_count": 2, "alpha": 0.2}}"#,
+            )
+            .unwrap_err();
+        assert!(err.contains("alpha cannot change"), "{err}");
+        s.set_evolution_settings(
+            r#"{"algorithm": "ars", "population": 16, "ars": {"elite_count": 2, "alpha": 0.1, "alpha_max": 0.3}}"#,
+        )
+        .unwrap();
+        s.set_evolution_settings(r#"{"algorithm": "ga", "population": 16, "ars": {"alpha": 0.1}}"#)
+            .unwrap();
+        s.advance_generation(60).unwrap();
+        s.next_generation().unwrap();
+        s.set_evolution_settings(r#"{"algorithm": "ars", "population": 16, "ars": {"alpha": 0.2}}"#)
             .unwrap();
     }
 

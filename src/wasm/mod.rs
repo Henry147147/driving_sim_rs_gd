@@ -450,6 +450,16 @@ impl Simulation {
         }
     }
 
+    /// Each ARS head's step size in head order as a `Float64Array`: the one
+    /// its last step used, or `ars.alpha` before its first step. Null unless
+    /// ARS runs and has search points (see `Session::ars_alphas`).
+    #[wasm_bindgen(js_name = arsAlphas)]
+    pub fn ars_alphas(&self) -> JsValue {
+        self.session().ars_alphas().map_or(JsValue::NULL, |alphas| {
+            js_sys::Float64Array::from(alphas.as_slice()).into()
+        })
+    }
+
     /// Statistics of the generation so far: `{bestIndex, bestScore, averageScore,
     /// worstScore, lapped, active, lapIndex, lapTime}` (lap fields null without a lap).
     #[wasm_bindgen(js_name = generationSummary)]

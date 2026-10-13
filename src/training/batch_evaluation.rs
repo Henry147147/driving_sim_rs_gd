@@ -1,9 +1,10 @@
 //! Equal-weight evaluation of one ordered population on several tracks.
-use crate::training::evolution::{reward_values, AgentResult, RewardSpec};
+use crate::training::evolution::{raw_reward_values, reward_values, AgentResult, Fitness, RewardSpec};
 
 pub struct BatchEvaluation {
     tracks: usize,
     rewards: Vec<f64>,
+    raw_rewards: Vec<f64>,
     totals: Vec<[f64; 14]>,
     updates: Vec<u64>,
     lap_counts: Vec<usize>,
@@ -12,6 +13,8 @@ pub struct BatchEvaluation {
 
 pub struct BatchSummary {
     pub fitness: Vec<f64>,
+    /// The mean raw reward (`raw_reward_values`) over the tracks.
+    pub raw_fitness: Vec<f64>,
     pub mean_scores: Vec<f64>,
     pub metric_totals: Vec<[f64; 14]>,
     pub update_counts: Vec<u64>,
@@ -20,12 +23,23 @@ pub struct BatchSummary {
     pub best_mean_lap_s: Option<f64>,
 }
 
+impl BatchSummary {
+    /// What `next_generation_with_fitness` takes.
+    pub fn turnover_fitness(&self) -> Fitness {
+        Fitness {
+            scores: self.fitness.clone(),
+            raw: self.raw_fitness.clone(),
+        }
+    }
+}
+
 impl BatchEvaluation {
     pub fn new(population: usize) -> Self {
         assert!(population > 0);
         Self {
             tracks: 0,
             rewards: vec![0.0; population],
+            raw_rewards: vec![0.0; population],
             totals: vec![[0.0; 14]; population],
             updates: vec![0; population],
             lap_counts: vec![0; population],
@@ -35,9 +49,10 @@ impl BatchEvaluation {
 
     pub fn record(&mut self, results: &[AgentResult], specs: &[RewardSpec]) {
         assert_eq!(results.len(), self.rewards.len());
-        let rewards = reward_values(results, specs);
+        let (rewards, raw) = (reward_values(results, specs), raw_reward_values(results, specs));
         for (i, result) in results.iter().enumerate() {
             self.rewards[i] += rewards[i];
+            self.raw_rewards[i] += raw[i];
             self.updates[i] += result.update_count;
             for (metric, value) in result.metrics.iter().enumerate() {
                 if metric == 10 {
@@ -82,6 +97,7 @@ impl BatchEvaluation {
         }
         BatchSummary {
             fitness: self.rewards.into_iter().map(|value| value / count).collect(),
+            raw_fitness: self.raw_rewards.into_iter().map(|value| value / count).collect(),
             mean_scores: totals.iter().map(|row| row[0] / count).collect(),
             metric_totals: totals,
             update_counts: self.updates,
@@ -126,6 +142,7 @@ mod tests {
         }
         let summary = batch.finish();
         assert_eq!(summary.fitness, vec![1.0 / 3.0, 0.5, 2.0 / 3.0]);
+        assert_eq!(summary.raw_fitness, vec![1000.0 / 3.0, 20.0, 20.0]);
         assert!(summary.fitness[1] > summary.fitness[0]);
         assert_eq!(summary.lapped_all_tracks, 2);
         assert_eq!(summary.best_mean_lap_s, Some(10.0));

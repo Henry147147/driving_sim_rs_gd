@@ -177,6 +177,7 @@ impl Connection {
                 session.sync()?;
                 ok(serde_json::to_value(session.generation_summary()).unwrap())
             }
+            "arsAlphas" => ok(json!(self.session()?.ars_alphas())),
             "networkJson" => {
                 let index = u64_arg(args, "index")?;
                 let index = usize::try_from(index).map_err(|_| format!("car {index} is outside the population"))?;
