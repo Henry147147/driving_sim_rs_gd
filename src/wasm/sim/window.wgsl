@@ -30,11 +30,11 @@ fn time_limit(k: u32) -> bool {
 fn load_car_state(index: u32) {
     sim_world=load_World(params.world_offset);
     sim_vehicle=load_VehicleDesc(params.vehicle_offset);
-    load_Car(index*800u);
+    load_Car(index*CAR_WORDS);
     load_Agent(index*94u);
 }
 fn save_car_state(index: u32) {
-    store_Car(index*800u);
+    store_Car(index*CAR_WORDS);
     store_Agent(index*94u);
 }
 
@@ -50,7 +50,7 @@ fn sensors_kernel(@builtin(global_invocation_id) id:vec3<u32>) {
  if(i>=params.population || s>=params.sensor_count || results[1]!=0u){return;}
  sim_world=load_World(params.world_offset);
  sim_vehicle=load_VehicleDesc(params.vehicle_offset);
- load_sensor_Car(i*800u);
+ load_sensor_Car(i*CAR_WORDS);
  if(eligible(i)){sense(i,s);}
 }
 var<workgroup> layer_input: array<F64,64>;
@@ -61,7 +61,7 @@ fn forward_kernel(@builtin(workgroup_id) group:vec3<u32>, @builtin(local_invocat
  var enabled=false;
  if(j==0u){atomicStore(&sensor_error,0u);}
  if(i<params.population && results[1]==0u){
-  sim_car.flags=cars[i*800u+16u];enabled=eligible(i);
+  sim_car.flags=cars[i*CAR_WORDS+CAR_FLAGS_WORD];enabled=eligible(i);
  }
  workgroupBarrier();
  if(enabled && j<params.sensor_count){
@@ -70,7 +70,7 @@ fn forward_kernel(@builtin(workgroup_id) group:vec3<u32>, @builtin(local_invocat
   if(err!=0u){atomicOr(&sensor_error,err);}
  }
  workgroupBarrier();
- if(enabled && j==0u){cars[i*800u+39u]=cars[i*800u+39u] | atomicLoad(&sensor_error);}
+ if(enabled && j==0u){cars[i*CAR_WORDS+CAR_ERROR_WORD]=cars[i*CAR_WORDS+CAR_ERROR_WORD] | atomicLoad(&sensor_error);}
  var position=i*params.stride;
  let math=load_World(params.world_offset).math_profile;
  for(var layer=0u;layer+1u<params.layers;layer=layer+1u){
@@ -102,7 +102,7 @@ fn stats_kernel(@builtin(global_invocation_id) id:vec3<u32>) {
 fn stop_kernel() {
  if(results[1]!=0u){return;}
  var live=false;
- for(var i=0u;i<params.population;i=i+1u){live=live || (cars[i*800u+16u]&CAR_ACTIVE)!=0u;}
+ for(var i=0u;i<params.population;i=i+1u){live=live || (cars[i*CAR_WORDS+CAR_FLAGS_WORD]&CAR_ACTIVE)!=0u;}
  if(time_limit(params.reserved_a) || (params.stop_inactive!=0u && !live)){
    results[0]=params.reserved_a;results[1]=1u;
  }
@@ -118,7 +118,7 @@ fn drive_kernel(@builtin(global_invocation_id) id:vec3<u32>) {
  let i=id.x;if(i>=params.population || results[1]!=0u){return;}
  load_car_state(i);
  let carry=step_begin(sim_agent.controls,true);
- store_StepCarry(4u+i*128u,carry);store_Car(i*800u);
+ store_StepCarry(4u+i*128u,carry);store_Car(i*CAR_WORDS);
 }
 @compute @workgroup_size(32)
 fn step_kernel(@builtin(global_invocation_id) id:vec3<u32>) {

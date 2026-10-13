@@ -64,11 +64,11 @@ const MAX_WINDOW_TICKS: u32 = 120;
 // little-endian word buffers match the generated raw WGSL loaders. Numeric
 // fields and initialized, explicit padding cover each copied type's layout.
 const _: () = {
-    assert!(std::mem::size_of::<GpuCar>() == 3200);
+    assert!(std::mem::size_of::<GpuCar>() == 3216);
     assert!(std::mem::size_of::<GpuAgent>() == 376);
-    assert!(std::mem::size_of::<simulation::VehicleDesc>() == 336);
+    assert!(std::mem::size_of::<simulation::VehicleDesc>() == 376);
     assert!(std::mem::size_of::<simulation::SensorDesc>() == 24);
-    assert!(std::mem::offset_of!(GpuCar, contacts) == 384);
+    assert!(std::mem::offset_of!(GpuCar, contacts) == 400);
     assert!(std::mem::offset_of!(GpuAgent, flags) == 368);
 };
 fn append<T: Copy>(data: &mut Vec<u32>, values: &[T]) -> Result<u32, String> {

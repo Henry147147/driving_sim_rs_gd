@@ -23,7 +23,8 @@ pub(crate) struct RayNode {
 
 pub(crate) type Vec2 = [f32; 2];
 
-pub(crate) const MAX_WHEELS: usize = 4;
+// Snowmobile has two steering skis and three powered track contact points.
+pub(crate) const MAX_WHEELS: usize = 5;
 pub(crate) const MAX_PAIRS: usize = 16;
 pub(crate) const MAX_CONTACTS: usize = 32;
 pub(crate) const MAX_SHAPE_POINTS: usize = 16;
