@@ -6,7 +6,7 @@ use super::Turnover;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::physics::car::Sensor;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::training::evolution::Generation;
+use crate::training::evolution::{Fitness, Generation};
 use crate::training::TrainingAgent;
 use rayon::prelude::*;
 
@@ -278,16 +278,16 @@ impl TrainingRunner {
     pub fn next_generation_gpu_with_fitness(
         &mut self,
         sim: &mut crate::gpu::simulation::GpuSim,
-        scores: Vec<f64>,
+        fitness: Fitness,
     ) -> Result<Turnover, String> {
-        self.next_generation_gpu_scored(sim, Some(scores))
+        self.next_generation_gpu_scored(sim, Some(fitness))
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     fn next_generation_gpu_scored(
         &mut self,
         sim: &mut crate::gpu::simulation::GpuSim,
-        scores: Option<Vec<f64>>,
+        fitness: Option<Fitness>,
     ) -> Result<Turnover, String> {
         let mut profile = crate::training::training_profile::Profile::new("gpu_turnover");
         // The preceding upload is complete, so its host buffer can hold noise
@@ -299,7 +299,7 @@ impl TrainingRunner {
             networks,
             preserved_count,
             rewards,
-        } = self.turnover(scores, &mut scratch, false).generation;
+        } = self.turnover(fitness, &mut scratch, false).generation;
         sim.return_parameter_buffer(scratch);
         profile.mark("reproduce");
         let src = std::array::from_fn(|c| {

@@ -108,7 +108,7 @@ fn climbs_a_quadratic() {
             .generation
             .networks;
     }
-    let end_distance = distance(&ars.theta, &target);
+    let end_distance = distance(&ars.heads[0].theta, &target);
     assert!(
         end_distance < start_distance / 3.0,
         "ars moved from {start_distance} to {end_distance}"
@@ -142,7 +142,10 @@ fn the_pool_holds_the_best_distinct_cars_and_leads_the_next_generation() {
         "the elites come first, best first"
     );
     assert_eq!(next.preserved_count, 4);
-    assert_eq!(next.networks[3].params, ars.theta, "then the moved search point");
+    assert_eq!(
+        next.networks[3].params, ars.heads[0].theta,
+        "then the moved search point"
+    );
     assert_eq!(next.networks.len(), 12);
 }
 
@@ -155,7 +158,7 @@ fn identical_scores_leave_the_search_point_alone() {
     let cars = ars.start(&seed, &s, &mut rng, MATH, false).generation.networks;
     let results = agents(&cars, &|_| 7.0);
     ars.next(&results, None, &s, &mut rng, &mut Vec::new(), MATH, false);
-    assert_eq!(ars.theta, seed.params);
+    assert_eq!(ars.heads[0].theta, seed.params);
 }
 
 #[test]
@@ -174,7 +177,7 @@ fn a_foreign_population_restarts_from_its_best_car() {
     let next = ars
         .next(&results, None, &s, &mut rng, &mut Vec::new(), MATH, false)
         .generation;
-    assert_eq!(ars.theta, others[top].params);
+    assert_eq!(ars.heads[0].theta, others[top].params);
     assert_eq!(next.networks.len(), 10);
 }
 
@@ -273,7 +276,7 @@ fn corrupt_records_are_rejected() {
     good.validate().unwrap();
     let edits: [&dyn Fn(&mut ArsRecord); 4] = [
         &|r| {
-            r.theta.pop();
+            r.heads[0].theta.pop();
         },
         &|r| r.sampling.nu = 0.0,
         &|r| r.sampling.population = 2,
@@ -298,7 +301,10 @@ fn next_with(ars: &mut Ars, cars: &[Network], s: &EvolutionSettings, seed: i64) 
     let mut rng = TrainingRandom::from(PyRandom::new(seed));
     ars.next(
         &results,
-        Some(fixed_scores(cars.len())),
+        Some(Fitness {
+            scores: fixed_scores(cars.len()),
+            raw: raw_reward_values(&results, &s.rewards),
+        }),
         s,
         &mut rng,
         &mut Vec::new(),
@@ -318,7 +324,7 @@ fn the_step_divides_by_the_noise_the_population_was_sampled_with() {
         let mut changed = s.clone();
         changed.ars.nu = later_nu;
         next_with(&mut ars, &cars, &changed, 2);
-        ars.theta
+        ars.heads[0].theta.clone()
     };
     // The step happens before the new population is sampled, whatever nu says by then.
     assert_eq!(run(0.1), run(0.001));
@@ -335,7 +341,7 @@ fn a_rebuilt_search_keeps_the_noise_it_sampled_with() {
     let (_, _, mut b) = record.rebuild();
     next_with(&mut a, &networks, &s, 3);
     next_with(&mut b, &networks, &other, 3);
-    assert_eq!(a.theta, b.theta);
+    assert_eq!(a.heads[0].theta, b.heads[0].theta);
 }
 
 #[test]
@@ -355,6 +361,363 @@ fn max_weight_bounds_the_search_point_and_elites_even_without_a_step() {
     assert!(third.iter().all(|n| n.params.iter().all(|p| p.abs() <= 0.005)));
 }
 
+fn heads_settings(population: usize, elite_count: usize, heads: usize) -> EvolutionSettings {
+    let mut s = settings(population, elite_count);
+    s.ars.heads = heads;
+    s
+}
+
+#[test]
+fn pairs_are_split_among_the_heads_with_the_remainder_to_the_first() {
+    assert_eq!(
+        (0..3).map(|h| pair_range(7, 3, h)).collect::<Vec<_>>(),
+        [(0, 3), (3, 2), (5, 2)]
+    );
+    assert_eq!(
+        (0..2).map(|h| pair_range(1, 2, h)).collect::<Vec<_>>(),
+        [(0, 1), (1, 0)]
+    );
+}
+
+#[test]
+fn every_head_gets_its_own_point_and_probes() {
+    // 2 elites, 3 heads: 2 + 3 points + 5 pairs (3 + 1 + 1) = 15, and one spare.
+    let (s, seed) = (heads_settings(16, 2, 3), seed());
+    let mut rng = TrainingRandom::from(PyRandom::new(1));
+    let mut ars = Ars::default();
+    let first = ars.start(&seed, &s, &mut rng, MATH, false);
+    assert_eq!(first.generation.preserved_count, 3, "no elites yet, one point per head");
+    let cars = first.generation.networks;
+    assert_eq!(cars.len(), 16);
+    // Different noise, same start: the heads begin at the seed and separate by their probes.
+    assert!(cars[..3].iter().all(|c| c.params == seed.params));
+    let results = agents(&cars, &|p| p[0]);
+    let next = ars
+        .next(&results, None, &s, &mut rng, &mut Vec::new(), MATH, false)
+        .generation;
+    assert_eq!(ars.heads.len(), 3);
+    assert_eq!(next.networks.len(), 16);
+    // Elites are in front of the heads' points.
+    let moved = &next.networks[2..5];
+    for (car, head) in moved.iter().zip(&ars.heads) {
+        assert_eq!(car.params, head.theta);
+    }
+    assert_ne!(ars.heads[0].theta, ars.heads[1].theta, "heads follow their own probes");
+}
+
+#[test]
+fn several_heads_climb_a_quadratic() {
+    let target: Vec<f64> = (0..parameter_count(&SHAPE))
+        .map(|i| ((i * 7 % 11) as f64 - 5.0) * 0.2)
+        .collect();
+    let score = |p: &[f64]| -distance(p, &target);
+    let s = heads_settings(60, 3, 3);
+    let mut rng = TrainingRandom::from(PyRandom::new(2));
+    let (mut ars, seed) = (Ars::default(), seed());
+    let start_distance = distance(&seed.params, &target);
+    let mut cars = ars.start(&seed, &s, &mut rng, MATH, false).generation.networks;
+    for _ in 0..150 {
+        let results = agents(&cars, &score);
+        cars = ars
+            .next(&results, None, &s, &mut rng, &mut Vec::new(), MATH, false)
+            .generation
+            .networks;
+    }
+    for head in &ars.heads {
+        assert!(distance(&head.theta, &target) < start_distance / 3.0);
+    }
+}
+
+#[test]
+fn the_head_count_can_change_between_generations() {
+    let mut rng = TrainingRandom::from(PyRandom::new(3));
+    let (mut ars, mut s) = (Ars::default(), heads_settings(20, 1, 1));
+    let cars = ars.start(&seed(), &s, &mut rng, MATH, false).generation.networks;
+    s.ars.heads = 3;
+    let (cars, record) = into_record(step(&mut ars, &cars, &s, &mut rng, &|p| p[0]));
+    assert_eq!((ars.heads.len(), record.heads.len()), (3, 3));
+    record.validate().unwrap();
+    assert_eq!(
+        record.heads[1].theta, record.heads[0].theta,
+        "new heads start from head 0"
+    );
+    s.ars.heads = 1;
+    let next = step(&mut ars, &cars, &s, &mut rng, &|p| p[0]).generation;
+    assert_eq!(ars.heads.len(), 1);
+    assert_eq!(next.networks.len(), 20);
+}
+
+fn adapting(every: u32) -> ArsSettings {
+    ArsSettings {
+        alpha: 0.05,
+        alpha_min: 0.01,
+        alpha_max: 0.2,
+        alpha_adapt_every: every,
+        alpha_adapt_warmup: 3,
+        alpha_adapt_fast: 0.5,
+        alpha_adapt_slow: 0.05,
+        alpha_adapt_threshold: 0.0,
+        alpha_adapt_up: 2.0,
+        alpha_adapt_down: 0.5,
+        ..ArsSettings::default()
+    }
+}
+
+#[test]
+fn alpha_waits_for_the_warmup() {
+    let ars = ArsSettings {
+        alpha_adapt_warmup: 5,
+        ..adapting(1)
+    };
+    let mut head = Head::new(vec![0.0]);
+    for reward in [1.0, 2.0, 3.0, 4.0] {
+        head.adapt(reward, &ars);
+    }
+    assert_eq!(head.alpha, Some(0.05), "no checks during the warm-up");
+    head.adapt(5.0, &ars);
+    assert_eq!(head.alpha, Some(0.1), "the first check follows the fifth reading");
+}
+
+#[test]
+fn the_averages_start_as_plain_means() {
+    let mut head = Head::new(vec![0.0]);
+    for reward in [1.0, 2.0, 3.0, 6.0] {
+        head.adapt(reward, &adapting(1));
+    }
+    assert_eq!(
+        head.slow,
+        Some(3.0),
+        "the slow average spans 20 readings, so it is their mean"
+    );
+    assert_eq!(
+        head.fast,
+        Some(4.125),
+        "the fast one spans 2: 1, 1.5, then halfway to each reading"
+    );
+    assert_eq!(head.readings, 4);
+}
+
+#[test]
+fn alpha_grows_while_the_reward_rises_and_shrinks_while_it_falls() {
+    let ars = adapting(1);
+    let mut head = Head::new(vec![0.0]);
+    for reward in [1.0, 2.0, 3.0, 4.0] {
+        head.adapt(reward, &ars);
+    }
+    assert_eq!(head.alpha, Some(0.2), "rising rewards double alpha up to the maximum");
+    for reward in [2.0, 0.0, -2.0, -4.0, -6.0, -8.0] {
+        head.adapt(reward, &ars);
+    }
+    assert_eq!(head.alpha, Some(0.01), "falling rewards halve it down to the minimum");
+}
+
+#[test]
+fn a_plateau_shrinks_alpha() {
+    let ars = ArsSettings {
+        alpha_adapt_threshold: 0.01,
+        ..adapting(1)
+    };
+    let mut head = Head::new(vec![0.0]);
+    for reward in [1.0, 2.0, 3.0, 4.0] {
+        head.adapt(reward, &ars);
+    }
+    assert_eq!(head.alpha, Some(0.2));
+    for _ in 0..100 {
+        head.adapt(4.0, &ars);
+    }
+    assert_eq!(
+        head.alpha,
+        Some(0.01),
+        "a flat reward reads as a plateau once the slow average catches up"
+    );
+
+    let tolerant = ArsSettings {
+        alpha_adapt_threshold: 10.0,
+        ..adapting(1)
+    };
+    let mut head = Head::new(vec![0.0]);
+    for reward in [1.0, 1.1, 1.2] {
+        head.adapt(reward, &tolerant);
+    }
+    assert_eq!(head.alpha, Some(0.025), "a rise inside the threshold is a plateau");
+}
+
+#[test]
+fn alpha_is_checked_only_every_so_many_generations_and_ignores_non_finite_rewards() {
+    let ars = adapting(3);
+    let mut head = Head::new(vec![0.0]);
+    for reward in [0.0, 1.0, 2.0] {
+        head.adapt(reward, &ars);
+    }
+    assert_eq!(head.alpha, Some(0.1), "one check after the third generation");
+    head.adapt(f64::NAN, &ars);
+    head.adapt(f64::NAN, &ars);
+    let (fast, slow) = (head.fast, head.slow);
+    head.adapt(f64::NAN, &ars);
+    assert_eq!((head.fast, head.slow, head.readings), (fast, slow, 3));
+    assert_eq!(head.alpha, Some(0.2), "the averages still rise, so alpha follows");
+}
+
+#[test]
+fn equal_bounds_freeze_alpha() {
+    let frozen = ArsSettings {
+        alpha_min: 0.05,
+        alpha_max: 0.05,
+        ..adapting(1)
+    };
+    let mut head = Head::new(vec![0.0]);
+    for reward in [0.0, 5.0, 10.0, 10.0, 10.0, 0.0, 0.0] {
+        head.adapt(reward, &frozen);
+    }
+    assert_eq!(head.alpha, Some(0.05));
+}
+
+#[test]
+fn caller_raw_rewards_drive_the_adaptation() {
+    let s = settings(10, 1);
+    let mut rng = TrainingRandom::from(PyRandom::new(4));
+    let mut ars = Ars::default();
+    let cars = ars.start(&seed(), &s, &mut rng, MATH, false).generation.networks;
+    let results = agents(&cars, &|p| p[0]);
+    let fitness = Fitness {
+        scores: reward_values(&results, &s.rewards),
+        raw: vec![42.0; cars.len()],
+    };
+    ars.next(&results, Some(fitness), &s, &mut rng, &mut Vec::new(), MATH, false);
+    assert_eq!((ars.heads[0].fast, ars.heads[0].slow), (Some(42.0), Some(42.0)));
+}
+
+#[test]
+fn the_adapted_alpha_scales_the_step() {
+    let step_of = |alpha_min: f64| {
+        let mut s = settings(10, 0);
+        s.ars.alpha_min = alpha_min;
+        s.ars.alpha_max = alpha_min;
+        s.ars.alpha = alpha_min;
+        let (mut ars, mut rng) = (Ars::default(), TrainingRandom::from(PyRandom::new(1)));
+        let cars = ars.start(&seed(), &s, &mut rng, MATH, false).generation.networks;
+        next_with(&mut ars, &cars, &s, 2);
+        distance(&ars.heads[0].theta, &seed().params)
+    };
+    let (small, large) = (step_of(0.01), step_of(0.02));
+    assert!((large / small - 2.0).abs() < 1e-9, "{small} {large}");
+}
+
+#[test]
+fn records_keep_the_step_size_state() {
+    let s = settings(14, 1);
+    let mut rng = TrainingRandom::from(PyRandom::new(8));
+    let mut ars = Ars::default();
+    let (mut cars, _) = into_record(ars.start(&seed(), &s, &mut rng, MATH, true));
+    let score = |p: &[f64]| p.iter().sum::<f64>();
+    for _ in 0..3 {
+        let (next, record) = into_record(step(&mut ars, &cars, &s, &mut rng, &score));
+        assert_eq!(record.heads, ars.heads);
+        cars = next;
+    }
+    let head = &ars.heads[0];
+    assert!(head.alpha.is_some() && head.fast.is_some() && head.since_check == 3 && head.readings == 3);
+}
+
+#[test]
+fn corrupt_head_state_is_rejected() {
+    let s = heads_settings(12, 1, 2);
+    let mut rng = TrainingRandom::from(PyRandom::new(10));
+    let (_, good) = into_record(Ars::default().start(&seed(), &s, &mut rng, MATH, true));
+    good.validate().unwrap();
+    let edits: [&dyn Fn(&mut ArsRecord); 4] = [
+        &|r| {
+            r.heads.pop();
+        },
+        &|r| r.heads[1].alpha = Some(-1.0),
+        &|r| r.heads[0].fast = Some(f64::INFINITY),
+        &|r| r.sampling.population = 5,
+    ];
+    for edit in edits {
+        let mut broken = good.clone();
+        edit(&mut broken);
+        assert!(broken.validate().is_err());
+    }
+}
+
+#[test]
+fn head_and_adaptation_settings_are_checked() {
+    let ok = ArsSettings::default();
+    validate(&ok, 6).unwrap();
+    assert!(validate(&ArsSettings { heads: 2, ..ok.clone() }, 8)
+        .unwrap_err()
+        .contains("3 * heads"));
+    validate(&ArsSettings { heads: 2, ..ok.clone() }, 9).unwrap();
+    for bad in [
+        ArsSettings { heads: 0, ..ok.clone() },
+        ArsSettings {
+            alpha_min: 0.3,
+            alpha_max: 0.1,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_min: 0.0,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_adapt_every: 0,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_adapt_fast: 0.0,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_adapt_slow: 1.5,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_adapt_threshold: -1.0,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_adapt_up: f64::NAN,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_adapt_down: 0.0,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha: 1.0,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha: 0.002,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_adapt_fast: 0.01,
+            alpha_adapt_slow: 0.1,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_adapt_fast: 0.1,
+            alpha_adapt_slow: 0.1,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_adapt_up: 0.9,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_adapt_down: 1.2,
+            ..ok.clone()
+        },
+        ArsSettings {
+            alpha_adapt_warmup: 5,
+            ..ok.clone()
+        },
+    ] {
+        assert!(validate(&bad, 50).is_err(), "{bad:?}");
+    }
+}
+
 #[test]
 fn an_edited_probe_makes_the_search_start_from_the_best_car() {
     let s = settings(10, 0);
@@ -363,5 +726,47 @@ fn an_edited_probe_makes_the_search_start_from_the_best_car() {
     cars[3].params[0] += 1.0;
     ars.invalidate();
     next_with(&mut ars, &cars, &s, 2);
-    assert_eq!(ars.theta, cars[1].params, "the leader of the fixed scores");
+    assert_eq!(ars.heads[0].theta, cars[1].params, "the leader of the fixed scores");
+}
+
+#[test]
+fn a_missing_metric_adds_nothing_to_the_raw_reward() {
+    let specs = [("total_score", 100), ("best_lap_performance", 100)].map(|(metric, weight)| {
+        crate::training::evolution::RewardSpec {
+            metric: metric.into(),
+            weight,
+            kind: "default".into(),
+        }
+    });
+    let network = seed();
+    let mut metrics: crate::training::evolution::Metrics = [None; 14];
+    metrics[0] = Some(30.0);
+    let mut lapped = metrics;
+    lapped[12] = Some(6.0);
+    let result = |metrics| AgentResult {
+        network: &network,
+        metrics,
+        update_count: 10,
+    };
+    assert_eq!(
+        raw_reward_values(&[result(metrics), result(lapped)], &specs),
+        [15.0, 18.0]
+    );
+}
+
+#[test]
+fn step_sizes_report_each_heads_alpha() {
+    let mut s = heads_settings(12, 1, 2);
+    s.ars.alpha = 0.1;
+    let mut ars = Ars::default();
+    assert_eq!(ars.step_sizes(&s), None, "no search points before the start");
+    let mut rng = TrainingRandom::from(PyRandom::new(2));
+    ars.start(&seed(), &s, &mut rng, MATH, false);
+    assert_eq!(
+        ars.step_sizes(&s),
+        Some(vec![0.1, 0.1]),
+        "the settings' alpha before the first step"
+    );
+    ars.heads[1].alpha = Some(0.3);
+    assert_eq!(ars.step_sizes(&s), Some(vec![0.1, 0.3]));
 }

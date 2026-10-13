@@ -11,7 +11,7 @@ use super::lineage::reproduce_traced;
 use super::{Lineage, TrainingRandom};
 use crate::math::profile::MathProfile;
 use crate::nn::network::Network;
-use crate::training::evolution::{reward_values, AgentResult, EvolutionSettings, Generation};
+use crate::training::evolution::{reward_values, AgentResult, EvolutionSettings, Fitness, Generation};
 
 /// What a checkpoint needs to rebuild the population an optimizer produced.
 #[derive(Clone)]
@@ -56,14 +56,14 @@ pub(crate) trait Optimizer: Send + Sync {
     ) -> Produced;
 
     /// The population after `agents`, the cars of the finished generation in
-    /// population order. `scores` are their rewards (`reward_values` when
-    /// absent). `scratch` is reusable storage for random draws. With `trace`,
+    /// population order. `fitness` holds their rewards when the caller
+    /// evaluated them (`reward_values` and `raw_reward_values` otherwise). `scratch` is reusable storage for random draws. With `trace`,
     /// the result carries the record a checkpoint rebuilds it from.
     #[allow(clippy::too_many_arguments)] // the call mirrors `start`, plus the cars and scratch
     fn next(
         &mut self,
         agents: &[AgentResult],
-        scores: Option<Vec<f64>>,
+        fitness: Option<Fitness>,
         settings: &EvolutionSettings,
         rng: &mut TrainingRandom,
         scratch: &mut Vec<f64>,
@@ -79,6 +79,13 @@ pub(crate) trait Optimizer: Send + Sync {
     /// optimizer's state to the population it produced.
     #[allow(dead_code)] // only the test and wasm `setNetworkJson` edit installed cars
     fn invalidate(&mut self) {}
+
+    /// Each search point's step size, for optimizers that adapt one: the one
+    /// its last step used, or the starting one. `None` otherwise or before
+    /// there are search points.
+    fn step_sizes(&self, _settings: &EvolutionSettings) -> Option<Vec<f64>> {
+        None
+    }
 }
 
 /// The optimizer for `algorithm`. Unknown names panic, as the other settings do.
@@ -147,14 +154,14 @@ impl Optimizer for Ga {
     fn next(
         &mut self,
         agents: &[AgentResult],
-        scores: Option<Vec<f64>>,
+        fitness: Option<Fitness>,
         settings: &EvolutionSettings,
         rng: &mut TrainingRandom,
         scratch: &mut Vec<f64>,
         math: MathProfile,
         trace: bool,
     ) -> Produced {
-        let scores = scores.unwrap_or_else(|| reward_values(agents, &settings.rewards));
+        let scores = fitness.map_or_else(|| reward_values(agents, &settings.rewards), |f| f.scores);
         Self::produce(agents, scores, settings, rng, scratch, math, trace)
     }
 }

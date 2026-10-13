@@ -7,7 +7,7 @@ use crate::math::vec2::V2;
 use crate::nn::network::Network;
 use crate::physics::car::{Car, Controls, SensorScratch, DT};
 use crate::track::world::World;
-use crate::training::evolution::{AgentResult, EvolutionSettings, Generation};
+use crate::training::evolution::{AgentResult, EvolutionSettings, Fitness, Generation};
 use rayon::prelude::*;
 use serde_json::Value;
 use std::sync::Arc;
@@ -191,12 +191,12 @@ impl TrainingRunner {
     }
 
     /// The population after the current agents, by the configured algorithm.
-    fn turnover(&mut self, scores: Option<Vec<f64>>, scratch: &mut Vec<f64>, trace: bool) -> Produced {
+    fn turnover(&mut self, fitness: Option<Fitness>, scratch: &mut Vec<f64>, trace: bool) -> Produced {
         self.sync_optimizer();
         let results: Vec<AgentResult> = self.agents.iter().map(TrainingAgent::result).collect();
         self.optimizer.next(
             &results,
-            scores,
+            fitness,
             &self.settings,
             &mut self.rng,
             scratch,
@@ -543,8 +543,10 @@ impl TrainingRunner {
         generation
     }
 
-    pub fn next_generation_with_fitness(&mut self, scores: Vec<f64>) -> Generation {
-        let generation = self.turnover(Some(scores), &mut Vec::new(), false).generation;
+    /// `next_generation` with rewards the caller evaluated, such as the
+    /// means over a batch of tracks.
+    pub fn next_generation_with_fitness(&mut self, fitness: Fitness) -> Generation {
+        let generation = self.turnover(Some(fitness), &mut Vec::new(), false).generation;
         self.install_next(&generation);
         generation
     }

@@ -557,13 +557,13 @@ pub(crate) fn train_scratch(config: &ScratchConfig, mode: Mode, threads: usize) 
                 if track_count == 1 {
                     runner.next_generation_gpu(sim)
                 } else {
-                    runner.next_generation_gpu_with_fitness(sim, summary.fitness.clone())
+                    runner.next_generation_gpu_with_fitness(sim, summary.turnover_fitness())
                 }
                 .unwrap_or_else(|e| panic!("--gpu: {e}"));
             } else if track_count == 1 {
                 runner.next_generation();
             } else {
-                runner.next_generation_with_fitness(summary.fitness.clone());
+                runner.next_generation_with_fitness(summary.turnover_fitness());
             }
         }
         let turnover_seconds = turnover_started.elapsed().as_secs_f64();

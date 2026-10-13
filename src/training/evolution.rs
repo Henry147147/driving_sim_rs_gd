@@ -115,7 +115,8 @@ impl AgentResult<'_> {
 pub struct ArsSettings {
     /// Standard deviation of the probe noise: probes are `theta +- nu * delta`.
     pub nu: f64,
-    /// Step size of the search point.
+    /// Starting step size of each head, within `[alpha_min, alpha_max]`;
+    /// fixed while ARS runs.
     pub alpha: f64,
     /// Fraction of the antithetic pairs, best first, that steer the step.
     pub top_frac: f64,
@@ -123,6 +124,27 @@ pub struct ArsSettings {
     pub elite_count: usize,
     /// Parameters are clamped to `[-max_weight, max_weight]`; 0 turns it off.
     pub max_weight: f64,
+    /// Independent search points; the probe pairs are split among them.
+    pub heads: usize,
+    /// Bounds of each head's adapted step size; equal bounds freeze it.
+    pub alpha_min: f64,
+    pub alpha_max: f64,
+    /// Generations between two trend checks of a head.
+    pub alpha_adapt_every: u32,
+    /// Readings of a head's reward before its first trend check.
+    pub alpha_adapt_warmup: u32,
+    /// Decay of the fast and slow averages of the search point's reward;
+    /// the fast one decays more. Until a head has `1 / decay` readings an
+    /// average is the plain mean of them.
+    pub alpha_adapt_fast: f64,
+    pub alpha_adapt_slow: f64,
+    /// How far the fast average must rise above the slow one, as a fraction
+    /// of the slow one's size, to count as improving.
+    pub alpha_adapt_threshold: f64,
+    /// Step size factors for an improving trend (at least 1) and for a
+    /// plateau or a regressing one (at most 1).
+    pub alpha_adapt_up: f64,
+    pub alpha_adapt_down: f64,
 }
 
 impl Default for ArsSettings {
@@ -133,6 +155,16 @@ impl Default for ArsSettings {
             top_frac: 1.0,
             elite_count: 3,
             max_weight: 0.0,
+            heads: 1,
+            alpha_min: 0.005,
+            alpha_max: 0.5,
+            alpha_adapt_every: 10,
+            alpha_adapt_warmup: 20,
+            alpha_adapt_fast: 0.2,
+            alpha_adapt_slow: 0.05,
+            alpha_adapt_threshold: 0.01,
+            alpha_adapt_up: 1.1,
+            alpha_adapt_down: 0.8,
         }
     }
 }
@@ -319,6 +351,16 @@ impl EvolutionSettings {
                 "top_frac": ars.top_frac,
                 "elite_count": ars.elite_count,
                 "max_weight": ars.max_weight,
+                "heads": ars.heads,
+                "alpha_min": ars.alpha_min,
+                "alpha_max": ars.alpha_max,
+                "alpha_adapt_every": ars.alpha_adapt_every,
+                "alpha_adapt_warmup": ars.alpha_adapt_warmup,
+                "alpha_adapt_fast": ars.alpha_adapt_fast,
+                "alpha_adapt_slow": ars.alpha_adapt_slow,
+                "alpha_adapt_threshold": ars.alpha_adapt_threshold,
+                "alpha_adapt_up": ars.alpha_adapt_up,
+                "alpha_adapt_down": ars.alpha_adapt_down,
             });
         }
         value
@@ -397,6 +439,39 @@ pub fn reward_values(agents: &[AgentResult], specs: &[RewardSpec]) -> Vec<f64> {
         }
     }
     result
+}
+
+/// Rewards a caller evaluated itself, one per car in population order, such
+/// as the means over a batch of tracks (`BatchEvaluation`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fitness {
+    /// What selection and the ARS step go by (like `reward_values`).
+    pub scores: Vec<f64>,
+    /// The same evaluation as raw rewards (like `raw_reward_values`), which
+    /// ARS compares across generations to adapt its step size.
+    pub raw: Vec<f64>,
+}
+
+/// Each car's reward as the weighted mean of its raw metric values, which
+/// unlike `reward_values` can be compared across generations. A missing
+/// metric adds nothing, as it does in `reward_values`.
+pub fn raw_reward_values(agents: &[AgentResult], specs: &[RewardSpec]) -> Vec<f64> {
+    let total_weight: i64 = specs.iter().map(|s| s.weight.abs()).sum();
+    if total_weight == 0 {
+        return vec![0.0; agents.len()];
+    }
+    agents
+        .iter()
+        .map(|a| {
+            specs
+                .iter()
+                .map(|spec| {
+                    a.value(spec)
+                        .map_or(0.0, |v| v * (spec.weight as f64 / total_weight as f64))
+                })
+                .sum()
+        })
+        .collect()
 }
 
 /// The adaptive mutation scale; its log is the C runtime's (.NET Math.Log).
