@@ -10,6 +10,7 @@ pub mod batch_evaluation;
 pub mod evaluation;
 pub mod evolution;
 pub mod game_random;
+pub mod generation_stats;
 pub mod pyrandom;
 pub mod session;
 pub(crate) mod training_profile;

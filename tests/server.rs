@@ -263,6 +263,10 @@ fn a_remote_session_matches_a_direct_session() {
         client.call("generationSummary", Value::Null),
         serde_json::to_value(session.generation_summary()).unwrap()
     );
+    assert_eq!(
+        client.call("generationStats", Value::Null),
+        serde_json::to_value(session.generation_stats()).unwrap()
+    );
     let (preserved, rewards) = session.next_generation().unwrap();
     let next = client.call("nextGeneration", Value::Null);
     assert_eq!(next["preservedCount"], json!(preserved));
