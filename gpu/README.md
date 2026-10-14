@@ -56,7 +56,7 @@ All three math profiles passed primitive and simulation checks on an RTX 3060 Ti
 
 ## Execution model
 
-GPU driving uses tick-major execution for independent cars. Native shared broadphase and paused windows are unsupported. Generated CLI tracks disable shared broadphase. Track preparation runs on a CPU producer with a bounded queue; `--track-buffer-size` sets its depth, default eight. Population/network buffers stay allocated while each fresh track replaces geometry.
+GPU driving uses tick-major execution. The native broadphase and paused windows are unsupported. Generated CLI tracks disable the native broadphase. Track preparation runs on a CPU producer with a bounded queue; `--track-buffer-size` sets its depth, default eight. Population/network buffers stay allocated while each fresh track replaces geometry.
 
 ## Validation and measurements
 

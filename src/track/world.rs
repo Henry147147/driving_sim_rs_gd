@@ -388,13 +388,11 @@ impl<T: Clone> TileTable<T> {
 }
 
 pub struct Track {
-    /// Fresh native tree with an explicit shape construction order.
-    /// Omitted by legacy geometry exports, which lack native construction state.
+    /// Each car orders its wall pairs like a fresh native tree holding the
+    /// walls and that car alone. Omitted by legacy geometry exports, which
+    /// lack native construction state.
     pub native_broadphase: bool,
-    pub(crate) native_body_order_reverse: bool,
     pub(crate) native_tilemap: bool,
-    pub(crate) native_cell_order: Vec<(i64, i64)>,
-    pub(crate) native_tile_order: Vec<(i64, i64)>,
     pub bsp: Option<Box<crate::track::bsp::Node>>,
     /// `bsp` arranged for raycasts.
     bsp_rays: Option<crate::track::bsp::RayTree>,
@@ -1127,13 +1125,7 @@ impl World {
         World {
             track: Track {
                 native_broadphase: track.get("native_broadphase").and_then(Value::as_bool).unwrap_or(false),
-                native_body_order_reverse: track.get("native_body_order").and_then(Value::as_str) == Some("reverse"),
                 native_tilemap: track.get("native_creation").and_then(Value::as_str) == Some("tilemap"),
-                native_tile_order: tiles.iter().map(key).collect(),
-                native_cell_order: track["native_cell_order"]
-                    .as_array()
-                    .map(|cells| cells.iter().map(|t| (num(&t[0]) as i64, num(&t[1]) as i64)).collect())
-                    .unwrap_or_else(|| tiles.iter().map(key).collect()),
                 bsp_rays: bsp.as_deref().map(crate::track::bsp::RayTree::new),
                 bsp,
                 raycaster_present,

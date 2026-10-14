@@ -14,7 +14,7 @@ use crate::training::evolution::{Breeding, EvolutionSettings, CROSSOVERS};
 use crate::training::generation_stats::{generation_stats, Spread};
 use crate::training::optimizer::Record;
 use crate::training::pyrandom::PyRandom;
-use crate::training::{Lineage, Mode, SensorLayout, TrainingAgent, TrainingRandom, TrainingRunner, CAR_STATE_STRIDE};
+use crate::training::{Lineage, SensorLayout, TrainingAgent, TrainingRandom, TrainingRunner, CAR_STATE_STRIDE};
 #[cfg(any(test, all(target_arch = "wasm32", feature = "wasm")))]
 use serde_json::json;
 use serde_json::Value;
@@ -61,8 +61,6 @@ pub struct SessionOptions {
     pub(crate) eliminate_when_idle: bool,
     /// Spawn pose; without it the scene's `reset_position`/`reset_rotation` are used.
     pub spawn: Option<Spawn>,
-    /// `"independent"` or `"lockstep"` (`--mode`).
-    pub mode: String,
     /// Evolution settings as `EvolutionSettings::from_mcp` reads them.
     pub(crate) settings: Option<Value>,
     /// WebGPU only: every n-th ray query is also cast on the CPU and compared
@@ -87,7 +85,6 @@ impl Default for SessionOptions {
             eliminate_on_wall: false,
             eliminate_when_idle: false,
             spawn: None,
-            mode: "independent".into(),
             settings: None,
             gpu_verify_every: 0,
             backend: Backend::Cpu,
@@ -208,11 +205,6 @@ impl Session {
                 _ => return Err("options.spawn is required: the scene has no reset_position".into()),
             },
         };
-        let mode = match options.mode.as_str() {
-            "independent" => Mode::Independent,
-            "lockstep" => Mode::Lockstep,
-            other => return Err(format!("unknown mode {other:?} (independent or lockstep)")),
-        };
         if options.batch_count == 0 {
             return Err("batchCount must be positive".into());
         }
@@ -256,7 +248,7 @@ impl Session {
         {
             return Err("wheel angle sensor requires a steering wheel".into());
         }
-        let mut runner = TrainingRunner::new(
+        let runner = TrainingRunner::new(
             world,
             V2::new(spawn.position[0], spawn.position[1]),
             spawn.rotation,
@@ -269,7 +261,6 @@ impl Session {
             options.eliminate_on_wall,
             options.eliminate_when_idle,
         );
-        runner.mode = mode;
         #[cfg(not(target_arch = "wasm32"))]
         let (hip, backend_note) = match options.backend {
             Backend::Cpu => (None, None),
@@ -1427,19 +1418,16 @@ mod tests {
 
     #[test]
     fn options_parse_with_defaults_and_reject_unknown_keys() {
-        let o =
-            SessionOptions::from_json(r#"{"population": 8, "seed": 3, "eliminateOnWall": true, "mode": "lockstep"}"#)
-                .unwrap();
+        let o = SessionOptions::from_json(r#"{"population": 8, "seed": 3, "eliminateOnWall": true}"#).unwrap();
         assert_eq!(
             (
                 o.population,
                 o.seed,
                 o.batch_count,
                 o.eliminate_on_wall,
-                o.eliminate_when_idle,
-                o.mode.as_str()
+                o.eliminate_when_idle
             ),
-            (Some(8), 3, 1, true, false, "lockstep")
+            (Some(8), 3, 1, true, false)
         );
         assert!(SessionOptions::from_json(r#"{"populaton": 8}"#).is_err());
         assert!(SessionOptions::from_json("{}").unwrap().population.is_none());

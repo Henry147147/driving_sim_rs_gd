@@ -24,7 +24,7 @@ python3 tools/benchmark.py --population 1024 --ticks 3600 --repeats 7 \
   --threads 1 8 --report target/cpu-benchmark.json
 ```
 
-The runner works from any directory, keeps every JSON sample and reports medians. `--scene`, `--spawn-trace`, `--network`, `--model`, `--modes` and `--binary` select another workload. It measures the CLI simulation interval; process launch, loading and the initial population are outside that interval.
+The runner works from any directory, keeps every JSON sample and reports medians. `--scene`, `--spawn-trace`, `--network`, `--model` and `--binary` select another workload. It measures the CLI simulation interval; process launch, loading and the initial population are outside that interval.
 
 ## Historical HIP measurements
 

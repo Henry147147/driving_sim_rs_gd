@@ -198,9 +198,6 @@ pub(crate) struct CollisionScratch {
     leaf_aabb: Option<Aabb>,
     broadphase: Option<BroadPhase>,
     pair_check_pending: bool,
-    external_pairs: bool,
-    pair_orientation: Vec<bool>,
-    pair_epochs: Vec<u64>,
     separating_axes: std::collections::HashMap<usize, V2>,
 }
 
@@ -239,35 +236,6 @@ impl FloatRect {
 impl CollisionScratch {
     pub(crate) fn has_shape(&self) -> bool {
         self.shape_aabb.is_some()
-    }
-    pub(crate) fn shape_bounds(&self) -> Aabb {
-        let r = self.shape_aabb.expect("native shape initialized");
-        Aabb::from_rect(r.position, r.size)
-    }
-    pub(crate) fn set_external_pairs(
-        &mut self,
-        pairs: &[usize],
-        wall_first: &[bool],
-        epochs: &[u64],
-        previous: &mut Vec<Contact>,
-    ) {
-        let retained = |wall: usize| {
-            pairs.iter().position(|&p| p == wall).is_some_and(|i| {
-                self.broad_pairs
-                    .iter()
-                    .position(|&p| p == wall)
-                    .is_some_and(|j| epochs[i] == self.pair_epochs[j])
-            })
-        };
-        previous.retain(|c| retained(c.shape_index));
-        self.separating_axes.retain(|&wall, _| retained(wall));
-        self.external_pairs = true;
-        self.broad_pairs.clear();
-        self.broad_pairs.extend_from_slice(pairs);
-        self.pair_orientation.clear();
-        self.pair_orientation.extend_from_slice(wall_first);
-        self.pair_epochs.clear();
-        self.pair_epochs.extend_from_slice(epochs);
     }
     /// Native _update_shapes runs when a transform changes, including resets;
     /// pair processing happens later in the broad-phase update.
@@ -339,7 +307,7 @@ fn find_contacts_with_basis(
         scratch.update_shape(cfg, position, body_basis);
     }
     let leaf = scratch.leaf_aabb.unwrap();
-    if !scratch.external_pairs && track.native_broadphase && scratch.broadphase.is_none() {
+    if track.native_broadphase && scratch.broadphase.is_none() {
         let walls: Vec<Aabb> = track
             .shapes
             .iter()
@@ -377,7 +345,7 @@ fn find_contacts_with_basis(
     }
     let car_axes = [normalize_f32(basis_x), normalize_f32(basis_y)];
 
-    if scratch.pair_check_pending && !scratch.external_pairs {
+    if scratch.pair_check_pending {
         if let Some(b) = scratch.broadphase.as_ref() {
             b.cull(query, &mut scratch.candidates);
         } else {
@@ -407,11 +375,7 @@ fn find_contacts_with_basis(
     for ci in 0..scratch.broad_pairs.len() {
         let shape_index = scratch.broad_pairs[ci];
         let shape = &track.shapes[shape_index];
-        let wall_first = if scratch.external_pairs {
-            scratch.pair_orientation[ci]
-        } else {
-            shape.wall_first
-        };
+        let wall_first = shape.wall_first;
         let wall_origin = shape.origin_f32;
         // BodyPair uses the origin of the body with the lower BVH handle.
         let pair_origin = if wall_first { wall_origin } else { car_origin };
@@ -778,7 +742,7 @@ impl CollisionScratch {
         previous: &[Contact],
     ) -> Result<(), String> {
         use crate::gpu::simulation::*;
-        if self.broadphase.is_some() || self.external_pairs {
+        if self.broadphase.is_some() {
             return Err("native broadphase pairs are not supported".into());
         }
         if self.broad_pairs.len() > MAX_PAIRS || previous.len() > MAX_CONTACTS {

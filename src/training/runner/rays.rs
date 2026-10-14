@@ -10,8 +10,8 @@ use rayon::prelude::*;
 
 impl TrainingRunner {
     /// Starts a `RayWindow` of up to `ticks` ticks (`advance_window` with an
-    /// external raycaster). Paused runners, native shared broadphase scenes,
-    /// and ray sensors without a BSP ray tree are not supported.
+    /// external raycaster). Paused runners and ray sensors without a BSP ray
+    /// tree are not supported.
     #[cfg(any(test, all(target_arch = "wasm32", feature = "wasm")))]
     pub(crate) fn begin_ray_window(
         &mut self,
@@ -19,8 +19,8 @@ impl TrainingRunner {
         stop_when_inactive: bool,
         time_limit: Option<f64>,
     ) -> Result<RayWindow, String> {
-        if self.user_paused || self.physics.is_some() {
-            return Err("external raycasting does not model paused or native-broadphase windows".into());
+        if self.user_paused {
+            return Err("external raycasting does not model paused windows".into());
         }
         if self.layout.ray_count() > 0 && self.world.track.ray_tree().is_none() {
             return Err("the scene has no BSP raycaster; the ray sensors need its RayTree".into());

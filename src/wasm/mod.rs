@@ -101,7 +101,7 @@ fn vehicle_template(text: &str) -> Result<serde_json::Value, JsError> {
 }
 
 /// Converts a track the game saved (the JSON inside a `.track` file) into a
-/// training scene for independent cars, with the vehicle and physics of
+/// training scene without the native broadphase, with the vehicle and physics of
 /// `templateJson`. Malformed or open tracks are reported as errors. The
 /// optional `mathProfile` names the math the scene is built with (the
 /// session's, which `detectMathProfile` defaults).
@@ -121,7 +121,7 @@ pub fn track_scene(
 
 /// The random training track of `generation` (0 for the first) in a run with
 /// `seed`: `settingsJson` holds `RandomTrainingTrackSettings`. The scene uses
-/// the game's TileMap position and independent cars, and the optional
+/// the game's TileMap position without the native broadphase, and the optional
 /// `mathProfile` as `trackScene` does.
 #[wasm_bindgen(js_name = randomTrackScene)]
 pub fn random_track_scene(

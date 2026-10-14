@@ -21,7 +21,6 @@ def main():
     parser.add_argument("--ticks", type=int, default=3600)
     parser.add_argument("--repeats", type=int, default=7)
     parser.add_argument("--threads", type=int, nargs="+", default=sorted({1, min(8, os.cpu_count() or 1)}))
-    parser.add_argument("--modes", choices=["independent", "lockstep"], nargs="+", default=["independent"])
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
@@ -32,19 +31,17 @@ def main():
               "--population", str(args.population), "--ticks", str(args.ticks),
               "--warmup-ticks", "2", "--seed", str(args.seed)]
     report = {"workload": "generated-track", "results": []}
-    for mode in args.modes:
-        for threads in args.threads:
-            command = [str(args.binary.resolve()), "--mode", mode, "--threads", str(threads), "bench", *common]
-            def run():
-                return json.loads(subprocess.run(command, cwd=ROOT, check=True, capture_output=True, text=True).stdout)
-            run()  # Untimed process warmup, in addition to each run's simulation warmup.
-            runs = [run() for _ in range(args.repeats)]
-            median = statistics.median(result["timed_wall_seconds"] for result in runs)
-            report["results"].append({"mode": mode, "threads": threads, "command": command,
-                                      "median_seconds": median, "runs": runs})
-            print(f"{mode}, {threads} threads: {median:.6f} seconds, {args.population * args.ticks / median:.0f} car-ticks/s", flush=True)
-            args.report.parent.mkdir(parents=True, exist_ok=True)
-            args.report.write_text(json.dumps(report, indent=2) + "\n")
+    for threads in args.threads:
+        command = [str(args.binary.resolve()), "--threads", str(threads), "bench", *common]
+        def run():
+            return json.loads(subprocess.run(command, cwd=ROOT, check=True, capture_output=True, text=True).stdout)
+        run()  # Untimed process warmup, in addition to each run's simulation warmup.
+        runs = [run() for _ in range(args.repeats)]
+        median = statistics.median(result["timed_wall_seconds"] for result in runs)
+        report["results"].append({"threads": threads, "command": command, "median_seconds": median, "runs": runs})
+        print(f"{threads} threads: {median:.6f} seconds, {args.population * args.ticks / median:.0f} car-ticks/s", flush=True)
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(json.dumps(report, indent=2) + "\n")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ use altd_sim::track::world::{vector, World};
 use altd_sim::training::batch_evaluation::BatchEvaluation;
 use altd_sim::training::evolution::EvolutionSettings;
 use altd_sim::training::pyrandom::PyRandom;
-use altd_sim::training::{Mode, SensorLayout, TrainingRandom, TrainingRunner};
+use altd_sim::training::{SensorLayout, TrainingRandom, TrainingRunner};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Instant;
@@ -30,7 +30,6 @@ pub(super) fn train(
     batch_count: usize,
     eliminate_on_wall: Option<bool>,
     idle_eliminate: Option<bool>,
-    mode: Mode,
     threads: usize,
     game_rng_state: Option<&Value>,
     tracks: &TrackOptions,
@@ -107,7 +106,6 @@ pub(super) fn train(
         eliminate_on_wall,
         idle_eliminate,
     );
-    runner.mode = mode;
     runner.start(&seed_network);
     let mut history = Vec::new();
     let mut best_score = f64::NEG_INFINITY;
@@ -197,7 +195,6 @@ pub(super) fn train(
         "realtime_multiplier": simulated_seconds / simulate_seconds,
         "complete_realtime_multiplier": simulated_seconds / total_seconds,
         "population": population,
-        "mode": match mode { Mode::Independent => "independent", Mode::Lockstep => "lockstep" },
     });
     for (k, v) in platform_json(threads).as_object().unwrap() {
         timing[k] = v.clone();

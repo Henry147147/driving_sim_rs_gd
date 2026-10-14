@@ -250,7 +250,7 @@ fn encode(session: &crate::training::session::Session) -> Result<Encoded, String
     let runner = &session.runner;
 
     if runner.world.track.native_broadphase || runner.world.track.shapes.is_empty() {
-        return Err("WebGPU simulation needs independent cars and physics shapes".into());
+        return Err("WebGPU simulation needs physics shapes and does not model the native broadphase".into());
     }
     let arrays = TrackArrays::new(&runner.world)?;
     let (nodes, walls, magnitude, depth) = runner

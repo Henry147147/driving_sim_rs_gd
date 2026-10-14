@@ -231,8 +231,8 @@ pub fn training_scene_at(
                 continue;
             }
             let mut scene = track.to_scene(template, math);
-            // CLI training uses independent cars on both backends. Native shared
-            // TileMap redraw replay remains available through TrainingRunner.
+            // The GPU backends do not model the native broadphase pair order,
+            // so CLI training uses the same wall pairs on every backend.
             scene["track"]["native_broadphase"] = Value::Bool(false);
             return Ok((track, scene));
         }

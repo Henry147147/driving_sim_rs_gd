@@ -8,7 +8,7 @@ use altd_sim::nn::network::Network;
 use altd_sim::track::world::{vector, World};
 use altd_sim::training::evolution::{EvolutionSettings, METRIC_NAMES};
 use altd_sim::training::pyrandom::PyRandom;
-use altd_sim::training::{Mode, SensorLayout, TrainingAgent, TrainingRunner};
+use altd_sim::training::{SensorLayout, TrainingAgent, TrainingRunner};
 use serde_json::{json, Map, Value};
 use std::path::Path;
 use std::sync::Arc;
@@ -46,7 +46,6 @@ pub(super) fn bench(
     seed: i64,
     batch_count: usize,
     spawn_index: usize,
-    mode: Mode,
     threads: usize,
     dump_state: Option<&Path>,
     math: MathProfile,
@@ -81,7 +80,6 @@ pub(super) fn bench(
         false,
         false,
     );
-    runner.mode = mode;
     let seed_network = Network::from_game_export(network_data);
 
     let started = Instant::now();
@@ -164,7 +162,6 @@ pub(super) fn bench(
         "complete_generation_wall_seconds": total_wall_seconds,
         "complete_generation_realtime_multiplier": complete_generation_seconds / total_wall_seconds,
         "peak_rss_kib": peak_rss_kib(),
-        "mode": match mode { Mode::Independent => "independent", Mode::Lockstep => "lockstep" },
     });
     let map = result.as_object_mut().unwrap();
     for (k, v) in platform_json(threads).as_object().unwrap() {

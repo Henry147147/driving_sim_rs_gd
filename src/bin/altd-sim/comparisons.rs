@@ -8,7 +8,7 @@ use altd_sim::physics::car::{Sensor, SensorScratch, DT};
 use altd_sim::track::world::{vector, World};
 use altd_sim::training::evolution::EvolutionSettings;
 use altd_sim::training::pyrandom::PyRandom;
-use altd_sim::training::{Mode, ScoreTracker, SensorLayout, TrainingRunner};
+use altd_sim::training::{ScoreTracker, SensorLayout, TrainingRunner};
 use serde_json::{json, Map, Value};
 use std::f64::consts::PI;
 use std::sync::Arc;
@@ -230,7 +230,6 @@ fn closed_loop_runner(
     model: &Value,
     batch_count: usize,
     stats_phase: u64,
-    mode: Mode,
 ) -> TrainingRunner {
     let settings = EvolutionSettings {
         population: 1,
@@ -241,7 +240,7 @@ fn closed_loop_runner(
         preserve_parents_size: 1,
         ..EvolutionSettings::default()
     };
-    let mut runner = TrainingRunner::new(
+    TrainingRunner::new(
         world.clone(),
         vector(&first["position"]),
         num(&first["rotation"]),
@@ -253,9 +252,7 @@ fn closed_loop_runner(
         stats_phase,
         false,
         false,
-    );
-    runner.mode = mode;
-    runner
+    )
 }
 
 pub(super) fn compare_closed_loop(
@@ -265,7 +262,6 @@ pub(super) fn compare_closed_loop(
     model: &Value,
     batch_count: usize,
     reused: bool,
-    mode: Mode,
 ) -> Value {
     let frames = frames(trace);
     let first = &frames[0];
@@ -288,7 +284,7 @@ pub(super) fn compare_closed_loop(
         });
     let stats_phase = stats_phase.map_or(0, |(r, _)| r) as u64;
     let valid: std::collections::HashSet<usize> = score_change_ticks.iter().skip(2).copied().collect();
-    let mut runner = closed_loop_runner(world, first, network_data, model, batch_count, stats_phase, mode);
+    let mut runner = closed_loop_runner(world, first, network_data, model, batch_count, stats_phase);
     runner.start(&Network::from_game_export(network_data));
     if reused || first.get("reset_transform").and_then(Value::as_bool) == Some(true) {
         runner.agents[0].car.reset(

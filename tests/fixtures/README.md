@@ -51,7 +51,7 @@ values remain in the fixture.
 | `native_tilemap_generated_slot06*`, `native_tilemap_generated_truck600.json` | 6 |
 | `native_tilemap_generated_snowmobile600.json` | 3 |
 | `native_tilemap_generated_coalesced600.json` | 0, then 6 |
-| `native_tilemap_generated_redraw600.json`, `native_tilemap_generated_redraw_resize600.json` | 2, then 5, 11, 2 |
+| `native_tilemap_generated_redraw600.json` | 2, then 5, 11, 2 |
 
 The redraw events occur at ticks 150, 300 and 450. Captures use the packed game
 DLL and vehicles in Godot 4.3 build 77dcf97d8 with Windows .NET 8.0.2 under
@@ -76,14 +76,14 @@ Tests build the scenes from that recipe, avoiding duplicate scene geometry.
 
 The generated data checks three wall encounters, trace restoration with and
 without body basis, sensors, contact impulse caches, complete score and lap
-statistics, native population resizing and redraw, and two Session generations
-in both execution modes. Four binary files check exact generation-boundary
-checkpoint bytes. Floating-point state is stored as hexadecimal f64 bits, with
-f32 state widened to f64 first. These eight golden outputs total about 2.9 MB.
+statistics, and two Session generations. Two binary files check exact
+generation-boundary checkpoint bytes. Floating-point state is stored as
+hexadecimal f64 bits, with f32 state widened to f64 first. These five golden
+outputs total about 1.5 MB.
 
 The Session snapshots and checkpoint bytes were captured on Linux x86_64 with
 GNU libm. Their exact golden comparisons run on that platform. On every
-platform, the Session test also compares both execution modes with the legacy
+platform, the Session test also compares Session with the legacy
 `TrainingRunner` on the same host, including every parameter and RNG bit, and
 checks that restoring a checkpoint reproduces the next generation's state and
 checkpoint bytes exactly. Gaussian initialization uses host float64 math, so
