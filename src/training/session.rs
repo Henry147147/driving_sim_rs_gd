@@ -11,12 +11,14 @@ use crate::training::ars::{ArsRecord, Elite, Head, Sampling};
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 use crate::training::evolution::METRIC_NAMES;
 use crate::training::evolution::{Breeding, EvolutionSettings, CROSSOVERS};
+use crate::training::generation_stats::{generation_stats, Spread};
 use crate::training::optimizer::Record;
 use crate::training::pyrandom::PyRandom;
 use crate::training::{Lineage, Mode, SensorLayout, TrainingAgent, TrainingRandom, TrainingRunner, CAR_STATE_STRIDE};
 #[cfg(any(test, all(target_arch = "wasm32", feature = "wasm")))]
 use serde_json::json;
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -435,7 +437,8 @@ impl Session {
     /// them only there. On HIP, `advance` and `advance_generation` do not
     /// update the runner's cars and agents (only `tick` and the batch
     /// index); call this before reading them, directly or with `car_states`,
-    /// `metrics`, `sensors`, `controls`, `best_lap` or `generation_summary`.
+    /// `metrics`, `sensors`, `controls`, `best_lap`, `generation_summary` or
+    /// `generation_stats`.
     pub fn sync(&mut self) -> Result<(), String> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(hip) = &mut self.hip {
@@ -541,6 +544,12 @@ impl Session {
             .iter()
             .map(|m| m.unwrap_or(f64::NAN))
             .collect())
+    }
+
+    /// Each statistic's spread over the population (see `generation_stats`).
+    pub fn generation_stats(&self) -> BTreeMap<&'static str, Spread> {
+        self.assert_current();
+        generation_stats(&self.runner.agents)
     }
 
     #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
@@ -1472,6 +1481,35 @@ mod tests {
         assert_eq!(rewards.len(), 6);
         assert_eq!(s.runner.agents.len(), 9);
         assert_eq!(s.runner.generation, generation + 1);
+    }
+
+    #[test]
+    fn generation_stats_summarise_each_cars_state_and_metrics() {
+        let mut s = generated_session(r#"{"population": 6, "seed": 5}"#);
+        s.start_with_shape(&[20, 8, 5]).unwrap();
+        s.advance_generation(300).unwrap();
+        let stats = s.generation_stats();
+        let states = s.car_states();
+        let cars = || states.chunks_exact(CAR_STATE_STRIDE);
+        let scores: Vec<f64> = cars().map(|car| car[7]).collect();
+        assert_eq!(
+            stats["score"],
+            crate::training::generation_stats::spread(scores).unwrap()
+        );
+        let seconds = cars().map(|car| car[13] * 0.1);
+        assert_eq!(stats["time"].max, seconds.fold(f64::MIN, f64::max));
+        let laps = cars().filter(|car| car[9] >= 0.0).count();
+        assert_eq!(stats.get("lap").map_or(0, |s| s.n), laps);
+        let speeds: Vec<f64> = (0..6)
+            .filter(|&i| states[i * CAR_STATE_STRIDE + 13] > 0.0)
+            .map(|i| s.metrics(i).unwrap()[1] / states[i * CAR_STATE_STRIDE + 13])
+            .collect();
+        assert_eq!(stats["speed"].n, speeds.len());
+        assert_eq!(stats["speed"].max, speeds.iter().copied().fold(f64::MIN, f64::max));
+        for spread in stats.values() {
+            assert_eq!(spread.bins.iter().sum::<u32>() as usize, spread.n);
+            assert!(spread.min <= spread.q[0] && spread.q[4] <= spread.max);
+        }
     }
 
     #[test]

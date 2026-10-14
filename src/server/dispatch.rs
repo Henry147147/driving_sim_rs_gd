@@ -177,6 +177,11 @@ impl Connection {
                 session.sync()?;
                 ok(serde_json::to_value(session.generation_summary()).unwrap())
             }
+            "generationStats" => {
+                let session = self.session()?;
+                session.sync()?;
+                ok(serde_json::to_value(session.generation_stats()).unwrap())
+            }
             "arsAlphas" => ok(json!(self.session()?.ars_alphas())),
             "networkJson" => {
                 let index = u64_arg(args, "index")?;

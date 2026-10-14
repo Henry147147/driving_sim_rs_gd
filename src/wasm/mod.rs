@@ -483,6 +483,14 @@ impl Simulation {
         Ok(result.into())
     }
 
+    /// Each statistic's spread over the population, keyed by statistic:
+    /// `{n, min, max, mean, sd, q: [P10, P25, P50, P75, P90], bins}`
+    /// (`Session::generation_stats`).
+    #[wasm_bindgen(js_name = generationStats)]
+    pub fn generation_stats(&self) -> Result<JsValue, JsError> {
+        to_js(&serde_json::to_value(self.session().generation_stats()).map_err(js_error)?)
+    }
+
     /// Cars that still drive.
     #[wasm_bindgen(getter, js_name = activeCount)]
     pub fn active_count(&self) -> u32 {
