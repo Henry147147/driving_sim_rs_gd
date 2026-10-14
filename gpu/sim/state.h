@@ -94,6 +94,7 @@ struct Agent {
     uint32_t recent_start, recent_len;
     uint64_t deactivated_at;
     uint32_t flags, pad;
+    double total_boost_useful, total_boost_wasted;
 };
 
 // world::WheelConfig with the conversions step_internal applies.

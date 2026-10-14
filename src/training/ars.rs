@@ -33,7 +33,7 @@ use super::TrainingRandom;
 use crate::math::profile::MathProfile;
 use crate::nn::network::{parameter_count, Network};
 use crate::training::evolution::{
-    raw_reward_values, reward_values, AgentResult, ArsSettings, EvolutionSettings, Fitness, Generation,
+    raw_reward_values, reward_values, AgentResult, ArsSettings, EvolutionSettings, Fitness, Generation, METRIC_COUNT,
 };
 use rayon::prelude::*;
 
@@ -505,7 +505,7 @@ impl Optimizer for Ars {
     ) -> Produced {
         let seed_result = [AgentResult {
             network: seed,
-            metrics: [None; 14],
+            metrics: [None; METRIC_COUNT],
             update_count: 0,
         }];
         let scores = reward_values(&seed_result, &settings.rewards);

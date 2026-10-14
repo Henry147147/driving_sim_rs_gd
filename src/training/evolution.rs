@@ -34,7 +34,10 @@ impl DecisionSource for crate::training::game_random::GameRandom {
     }
 }
 
-pub const METRIC_NAMES: [&str; 14] = [
+/// The number of training metrics, `METRIC_NAMES.len()`.
+pub const METRIC_COUNT: usize = 15;
+
+pub const METRIC_NAMES: [&str; METRIC_COUNT] = [
     "total_score",
     "total_speed",
     "total_abs_steering",
@@ -49,11 +52,12 @@ pub const METRIC_NAMES: [&str; 14] = [
     "collision_count",
     "best_lap_performance",
     "total_racing_line_efficiency",
+    "total_boost_net",
 ];
 
-pub(crate) type Metrics = [Option<f64>; 14];
+pub(crate) type Metrics = [Option<f64>; METRIC_COUNT];
 
-const AVERAGE_METRICS: [&str; 10] = [
+const AVERAGE_METRICS: [&str; 11] = [
     "total_score",
     "total_speed",
     "total_abs_steering",
@@ -64,6 +68,7 @@ const AVERAGE_METRICS: [&str; 10] = [
     "total_momentum_change_frequency",
     "total_throttle_change_frequency",
     "total_braking_frequency",
+    "total_boost_net",
 ];
 const AVERAGE_ONLY_METRICS: [&str; 6] = [
     "total_abs_steering",
@@ -992,12 +997,12 @@ mod tests {
         let agents = [
             AgentResult {
                 network: &network,
-                metrics: [Some(1.0); 14],
+                metrics: [Some(1.0); METRIC_COUNT],
                 update_count: 1,
             },
             AgentResult {
                 network: &network,
-                metrics: [Some(2.0); 14],
+                metrics: [Some(2.0); METRIC_COUNT],
                 update_count: 1,
             },
         ];
@@ -1083,7 +1088,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, network)| {
-                let mut metrics: Metrics = [None; 14];
+                let mut metrics: Metrics = [None; METRIC_COUNT];
                 metrics[0] = Some(((i * 7919) % 23) as f64 * 0.5);
                 AgentResult {
                     network,
@@ -1148,7 +1153,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, network)| {
-                let mut metrics: Metrics = [None; 14];
+                let mut metrics: Metrics = [None; METRIC_COUNT];
                 metrics[0] = Some(((i * 7919) % 23) as f64 * 0.5);
                 AgentResult {
                     network,

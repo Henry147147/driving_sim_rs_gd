@@ -183,6 +183,15 @@ impl Connection {
                 ok(serde_json::to_value(session.generation_stats()).unwrap())
             }
             "arsAlphas" => ok(json!(self.session()?.ars_alphas())),
+            "metricNames" => ok(json!(Session::metric_names())),
+            "metrics" => {
+                let index = u64_arg(args, "index")?;
+                let index = usize::try_from(index).map_err(|_| format!("car {index} is outside the population"))?;
+                let session = self.session()?;
+                session.sync()?;
+                // JSON has no NaN: unset metrics are null.
+                ok(json!(session.metrics(index)?))
+            }
             "networkJson" => {
                 let index = u64_arg(args, "index")?;
                 let index = usize::try_from(index).map_err(|_| format!("car {index} is outside the population"))?;

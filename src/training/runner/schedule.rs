@@ -1,7 +1,7 @@
 //! Car-major training windows: each car runs a window on its own.
 
 use super::{ControlSlot, TrainingRunner};
-use crate::physics::car::{Controls, DT};
+use crate::physics::car::Controls;
 use crate::track::world::World;
 use crate::training::{SensorLayout, TrainingAgent};
 use rayon::prelude::*;
@@ -28,12 +28,7 @@ impl Schedule<'_> {
     }
     /// The physics step of `drive_agent`, with the agent's current controls.
     pub(super) fn step_agent(&self, agent: &mut TrainingAgent, tick: u64) {
-        let was_active = agent.car.active;
-        let contact = agent.car.step(self.world, &agent.controls, DT, self.eliminate_on_wall);
-        agent.pending_contact |= contact;
-        if was_active && !agent.car.active {
-            agent.deactivated_at = Some(tick);
-        }
+        agent.step(self.world, self.eliminate_on_wall, true, tick);
     }
     /// Whether agent `index` belongs to an inference batch due at `batch_index`.
     pub(super) fn infers(&self, index: usize, batch_index: usize) -> bool {

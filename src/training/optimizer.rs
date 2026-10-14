@@ -11,7 +11,7 @@ use super::lineage::reproduce_traced;
 use super::{Lineage, TrainingRandom};
 use crate::math::profile::MathProfile;
 use crate::nn::network::Network;
-use crate::training::evolution::{reward_values, AgentResult, EvolutionSettings, Fitness, Generation};
+use crate::training::evolution::{reward_values, AgentResult, EvolutionSettings, Fitness, Generation, METRIC_COUNT};
 
 /// What a checkpoint needs to rebuild the population an optimizer produced.
 #[derive(Clone)]
@@ -144,7 +144,7 @@ impl Optimizer for Ga {
     ) -> Produced {
         let seed_result = [AgentResult {
             network: seed,
-            metrics: [None; 14],
+            metrics: [None; METRIC_COUNT],
             update_count: 0,
         }];
         let scores = reward_values(&seed_result, &settings.rewards);

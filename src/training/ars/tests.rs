@@ -29,7 +29,7 @@ fn agents<'a>(networks: &'a [Network], score: &dyn Fn(&[f64]) -> f64) -> Vec<Age
     networks
         .iter()
         .map(|network| {
-            let mut metrics: Metrics = [None; 14];
+            let mut metrics: Metrics = [None; METRIC_COUNT];
             metrics[0] = Some(score(&network.params));
             AgentResult {
                 network,
@@ -739,7 +739,7 @@ fn a_missing_metric_adds_nothing_to_the_raw_reward() {
         }
     });
     let network = seed();
-    let mut metrics: crate::training::evolution::Metrics = [None; 14];
+    let mut metrics: crate::training::evolution::Metrics = [None; METRIC_COUNT];
     metrics[0] = Some(30.0);
     let mut lapped = metrics;
     lapped[12] = Some(6.0);

@@ -239,6 +239,8 @@ fn a_remote_session_matches_a_direct_session() {
     let address = start();
     let mut client = Client::connect(address);
     let mut session = direct(&options);
+    // Metric names need no session.
+    assert_eq!(client.call("metricNames", Value::Null), json!(Session::metric_names()));
     assert_eq!(
         client.create(&options),
         json!({"backend": "cpu", "backendNote": null, "mathProfile": "proton"})
@@ -267,12 +269,22 @@ fn a_remote_session_matches_a_direct_session() {
         client.call("generationStats", Value::Null),
         serde_json::to_value(session.generation_stats()).unwrap()
     );
+    for index in 0..8 {
+        // Unset metrics (NaN) are null in JSON.
+        let metrics = session.metrics(index).unwrap();
+        assert!(metrics.iter().any(|m| m.is_nan()));
+        assert_eq!(client.call("metrics", json!({"index": index})), json!(metrics));
+    }
     let (preserved, rewards) = session.next_generation().unwrap();
     let next = client.call("nextGeneration", Value::Null);
     assert_eq!(next["preservedCount"], json!(preserved));
     let remote_rewards: Vec<f64> = serde_json::from_value(next["rewards"].clone()).unwrap();
     assert_eq!(bits(&remote_rewards), bits(&rewards));
-    let settings = r#"{"population": 6, "selection_size": 2, "mutation_rate": 0.1}"#;
+    // Several rewards and penalties, including per-second averages.
+    let settings = r#"{"population": 6, "selection_size": 2, "mutation_rate": 0.1, "rewards": [
+        {"metric": "total_score", "weight": 1000, "type": "default"},
+        {"metric": "collision_count", "weight": -50, "type": "default"},
+        {"metric": "total_boost_net", "weight": 5, "type": "average"}]}"#;
     client.call("setEvolutionSettings", json!({"json": settings}));
     session.set_evolution_settings(settings).unwrap();
     let track = generated::scene("formula", 1);
@@ -612,6 +624,7 @@ fn errors_leave_the_connection_usable() {
         .error("advance", json!({"ticks": 1, "stopWhenInactive": false}))
         .contains("create"));
     assert!(client.error("checkpointBytes", Value::Null).contains("create"));
+    assert!(client.error("metrics", json!({"index": 0})).contains("create"));
     assert!(client
         .error("create", json!({"scene": "{", "network": "{}", "model": "{}"}))
         .contains("scene"));
@@ -633,6 +646,8 @@ fn errors_leave_the_connection_usable() {
         .error("startWithShape", json!({"shape": [20, u64::MAX, 5]}))
         .contains("32-bit"));
     assert!(client.error("teleport", Value::Null).contains("unknown operation"));
+    assert!(client.error("metrics", json!({"index": 99})).contains("outside"));
+    assert!(client.error("metrics", Value::Null).contains("index"));
     assert!(client
         .error("advance", json!({"ticks": -1, "stopWhenInactive": false}))
         .contains("ticks"));

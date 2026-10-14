@@ -58,6 +58,22 @@ __device__ inline void score_update(const World& w, Agent& a, Vec2 position, uin
     a.previous_offset = offset;
 }
 
+// `TrainingStats::account_boost`, before a driving step.
+__device__ inline void boost_account(const VehicleDesc& v, const Car& car, Agent& a) {
+    if (!(car.flags & CAR_ACTIVE)) return;
+    double acceleration = py_clamp(a.controls[0], -1.0, 1.0);
+    float boost = (float)py_clamp(a.controls[4], 0.0, 1.0), energy = car.boost_energy;
+    if (boost > 0.0f && energy > 0.0f) {
+        double spent = (double)(energy - rmax(energy - boost * 0.01f, 0.0f));
+        bool capped = (double)length(car.velocity) > v.max_velocity;
+        double useful = (capped || acceleration <= 0.0) ? 0.0 : acceleration;
+        a.total_boost_useful += spent * useful;
+        a.total_boost_wasted += spent * (1.0 - useful);
+    } else if (boost > 0.0f) {
+        a.total_boost_wasted += 0.002;
+    }
+}
+
 // `TrainingStats::update`
 __device__ inline void stats_update(const World& w, const Car& car, Agent& a, uint64_t tick, uint32_t& err) {
     if (a.flags & AGENT_PENDING_CONTACT) a.collision_count++;

@@ -51,7 +51,7 @@ pub(crate) fn verify(d: &Value) -> Value {
                 .iter()
                 .enumerate()
                 .map(|(i, n)| {
-                    let mut metrics = [None; 14];
+                    let mut metrics = [None; altd_sim::training::evolution::METRIC_COUNT];
                     metrics[0] = Some([10.0, 20.0, 20.0][i]);
                     AgentResult {
                         network: n,

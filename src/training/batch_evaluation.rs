@@ -1,11 +1,11 @@
 //! Equal-weight evaluation of one ordered population on several tracks.
-use crate::training::evolution::{raw_reward_values, reward_values, AgentResult, Fitness, RewardSpec};
+use crate::training::evolution::{raw_reward_values, reward_values, AgentResult, Fitness, RewardSpec, METRIC_COUNT};
 
 pub struct BatchEvaluation {
     tracks: usize,
     rewards: Vec<f64>,
     raw_rewards: Vec<f64>,
-    totals: Vec<[f64; 14]>,
+    totals: Vec<[f64; METRIC_COUNT]>,
     updates: Vec<u64>,
     lap_counts: Vec<usize>,
     lap_sums: Vec<f64>,
@@ -16,7 +16,7 @@ pub struct BatchSummary {
     /// The mean raw reward (`raw_reward_values`) over the tracks.
     pub raw_fitness: Vec<f64>,
     pub mean_scores: Vec<f64>,
-    pub metric_totals: Vec<[f64; 14]>,
+    pub metric_totals: Vec<[f64; METRIC_COUNT]>,
     pub update_counts: Vec<u64>,
     pub lap_counts: Vec<usize>,
     pub lapped_all_tracks: usize,
@@ -40,7 +40,7 @@ impl BatchEvaluation {
             tracks: 0,
             rewards: vec![0.0; population],
             raw_rewards: vec![0.0; population],
-            totals: vec![[0.0; 14]; population],
+            totals: vec![[0.0; METRIC_COUNT]; population],
             updates: vec![0; population],
             lap_counts: vec![0; population],
             lap_sums: vec![0.0; population],
@@ -127,7 +127,7 @@ mod tests {
                 .into_iter()
                 .enumerate()
                 .map(|(i, score)| {
-                    let mut metrics = [Some(0.0); 14];
+                    let mut metrics = [Some(0.0); METRIC_COUNT];
                     metrics[0] = Some(score);
                     metrics[10] = Some(7.0);
                     metrics[12] = if i == 0 { None } else { Some(0.1) };
@@ -176,7 +176,7 @@ mod tests {
         for track in 0..2 {
             let results: Vec<_> = (0..3)
                 .map(|i| {
-                    let mut metrics = [Some(0.0); 14];
+                    let mut metrics = [Some(0.0); METRIC_COUNT];
                     metrics[0] = Some([[90.0, 60.0, 30.0], [10.0, 20.0, 30.0]][track][i]);
                     metrics[11] = Some((i * 10) as f64);
                     metrics[12] = if i == track {

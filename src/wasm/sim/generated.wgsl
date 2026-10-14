@@ -87,6 +87,8 @@ struct Agent {
     deactivated_at: U64,
     flags: u32,
     pad: u32,
+    total_boost_useful: F64,
+    total_boost_wasted: F64,
 }
 
 struct WheelDesc {
@@ -481,6 +483,12 @@ const CAR_FLAGS_WORD: u32 = 16u;
 
 const CAR_ERROR_WORD: u32 = 43u;
 
+const AGENT_WORDS: u32 = 98u;
+
+const AGENT_FLAGS_WORD: u32 = 92u;
+
+const AGENT_DEACTIVATED_AT_WORD: u32 = 90u;
+
 fn load_World(o: u32) -> World { return World(world_data[(o + 0u)], world_data[(o + 1u)], world_data[(o + 2u)], bitcast<f32>(world_data[(o + 3u)]), world_data[(o + 4u)], world_data[(o + 5u)], world_data[(o + 6u)], world_data[(o + 7u)], world_data[(o + 8u)], i32(world_data[(o + 9u)]), i32(world_data[(o + 10u)]), i32(world_data[(o + 11u)]), i32(world_data[(o + 12u)]), world_data[(o + 13u)], world_data[(o + 14u)], world_data[(o + 15u)], world_data[(o + 16u)], world_data[(o + 17u)], load_NearGrid((o + 18u)), world_data[(o + 28u)], bitcast<f32>(world_data[(o + 29u)]), world_data[(o + 30u)], world_data[(o + 31u)], world_data[(o + 32u)], load_NearGrid((o + 34u)), world_data[(o + 44u)], world_data[(o + 45u)], world_data[(o + 46u)], world_data[(o + 47u)], world_data[(o + 48u)], load_NearGrid((o + 50u)), U64(world_data[(o + 60u)], world_data[(o + 60u) + 1u]), world_data[(o + 62u)]); }
 
 fn load_NearGrid(o: u32) -> NearGrid { return NearGrid(U64(world_data[(o + 0u)], world_data[(o + 0u) + 1u]), U64(world_data[(o + 2u)], world_data[(o + 2u) + 1u]), U64(world_data[(o + 4u)], world_data[(o + 4u) + 1u]), world_data[(o + 6u)], world_data[(o + 7u)], world_data[(o + 8u)], world_data[(o + 9u)]); }
@@ -675,6 +683,8 @@ sim_agent.recent_len = agents[(o+89u)];
 sim_agent.deactivated_at = U64(agents[(o+90u)], agents[(o+90u) + 1u]);
 sim_agent.flags = agents[(o+92u)];
 sim_agent.pad = agents[(o+93u)];
+sim_agent.total_boost_useful = U64(agents[(o+94u)], agents[(o+94u) + 1u]);
+sim_agent.total_boost_wasted = U64(agents[(o+96u)], agents[(o+96u) + 1u]);
 }
 
 fn store_Agent(o: u32) {
@@ -718,6 +728,8 @@ agents[(o+89u)] = u32(sim_agent.recent_len);
 agents[(o+90u)] = sim_agent.deactivated_at.x; agents[(o+90u) + 1u] = sim_agent.deactivated_at.y;
 agents[(o+92u)] = u32(sim_agent.flags);
 agents[(o+93u)] = u32(sim_agent.pad);
+agents[(o+94u)] = sim_agent.total_boost_useful.x; agents[(o+94u) + 1u] = sim_agent.total_boost_useful.y;
+agents[(o+96u)] = sim_agent.total_boost_wasted.x; agents[(o+96u) + 1u] = sim_agent.total_boost_wasted.y;
 }
 
 fn load_sensor_Car(o: u32) {
@@ -4445,6 +4457,31 @@ sim_agent.flags = (sim_agent.flags & ~(AGENT_WENT_BACKWARDS));
 
 }
 sim_agent.previous_offset = offset;
+
+}
+
+fn boost_account() {
+
+
+if (!(((sim_car.flags & CAR_ACTIVE) != u32(0)))) {
+return;
+}
+var acceleration: F64 = py_clamp(sim_agent.controls[u32(0i)], f64_neg(F64(0x00000000u, 0x3ff00000u)), F64(0x00000000u, 0x3ff00000u));
+var boost: f32 = f64_to_f32(py_clamp(sim_agent.controls[u32(4i)], F64(0x00000000u, 0x00000000u), F64(0x00000000u, 0x3ff00000u)));
+var energy: f32 = sim_car.boost_energy;
+if (((boost > bitcast<f32>(0x00000000u)) && (energy > bitcast<f32>(0x00000000u)))) {
+var spent: F64 = f64_from_f32(fp_sub(energy, rmax(fp_sub(energy, fp_mul(boost, bitcast<f32>(0x3c23d70au))), bitcast<f32>(0x00000000u))));
+var capped: bool = f64_gt(f64_from_f32(length(sim_car.velocity)), sim_vehicle.max_velocity);
+var useful: F64 = select(acceleration, F64(0x00000000u, 0x00000000u), (capped || f64_le(acceleration, F64(0x00000000u, 0x00000000u))));
+sim_agent.total_boost_useful = f64_add(sim_agent.total_boost_useful, f64_mul(spent, useful));
+sim_agent.total_boost_wasted = f64_add(sim_agent.total_boost_wasted, f64_mul(spent, f64_sub(F64(0x00000000u, 0x3ff00000u), useful)));
+}
+ else {
+if ((boost > bitcast<f32>(0x00000000u))) {
+sim_agent.total_boost_wasted = f64_add(sim_agent.total_boost_wasted, F64(0xd2f1a9fcu, 0x3f60624du));
+}
+
+}
 
 }
 
