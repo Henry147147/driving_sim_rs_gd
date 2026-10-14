@@ -65,7 +65,7 @@ fn batch_stop_conditions_require_one_driver_to_succeed_across_all_tracks() {
     for track in 0..2 {
         let results: Vec<_> = (0..2)
             .map(|i| {
-                let mut metrics = [Some(0.0); 14];
+                let mut metrics = [Some(0.0); altd_sim::training::evolution::METRIC_COUNT];
                 metrics[0] = Some(if i == track { 100.0 } else { 0.0 });
                 metrics[12] = if i == track { Some(0.1) } else { None };
                 AgentResult {

@@ -65,7 +65,7 @@ const MAX_WINDOW_TICKS: u32 = 120;
 // fields and initialized, explicit padding cover each copied type's layout.
 const _: () = {
     assert!(std::mem::size_of::<GpuCar>() == 3216);
-    assert!(std::mem::size_of::<GpuAgent>() == 376);
+    assert!(std::mem::size_of::<GpuAgent>() == 392);
     assert!(std::mem::size_of::<simulation::VehicleDesc>() == 376);
     assert!(std::mem::size_of::<simulation::SensorDesc>() == 24);
     assert!(std::mem::offset_of!(GpuCar, contacts) == 400);

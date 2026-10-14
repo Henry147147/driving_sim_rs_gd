@@ -106,6 +106,11 @@ pub fn generation_stats(agents: &[TrainingAgent]) -> BTreeMap<&'static str, Spre
         // These grow by the update period while the car drifts or brakes.
         add("drifting", s.total_drifting_amount / updates / UPDATE_SECONDS * 100.0);
         add("braking", s.total_braking_frequency / updates / UPDATE_SECONDS * 100.0);
+        // Net useful boost (`total_boost_net`) in tanks per second of driving.
+        add(
+            "boost",
+            (s.total_boost_useful - s.total_boost_wasted) / (updates * UPDATE_SECONDS),
+        );
     }
     values
         .into_iter()

@@ -70,6 +70,12 @@ pub struct TrainingStats {
     pub total_braking_frequency: f64,
     pub total_distance_from_wall: f64,
     pub total_distance_from_center: f64,
+    /// Boost energy (a full tank is 1) spent on thrust, every driving tick
+    /// (`account_boost`).
+    pub total_boost_useful: f64,
+    /// Boost energy spent without thrust, and recharge forgone by holding
+    /// boost on an empty tank.
+    pub total_boost_wasted: f64,
     pub best_lap_time: Option<f64>,
     pub idle_ticks: u64,
     pub previous_speed: f64,
@@ -102,6 +108,8 @@ impl TrainingStats {
             total_braking_frequency: 0.0,
             total_distance_from_wall: 0.0,
             total_distance_from_center: 0.0,
+            total_boost_useful: 0.0,
+            total_boost_wasted: 0.0,
             best_lap_time: None,
             idle_ticks: 0,
             previous_speed: 0.0,
@@ -115,6 +123,35 @@ impl TrainingStats {
             max_continuous_drift_time: 0.0,
             all_laps_time_sum: None,
             recent_score_diffs: VecDeque::with_capacity(10),
+        }
+    }
+
+    /// Splits the boost of the driving step `car` is about to take with
+    /// `controls` into useful and wasted energy. Boost multiplies only
+    /// positive acceleration, so a share `acceleration` of the energy spent
+    /// adds thrust; at full speed the step's whole impulse is discarded, and
+    /// boost held on an empty tank forgoes its recharge. Unlike `update`, this
+    /// runs on every tick, before `Car::step`.
+    pub fn account_boost(&mut self, world: &World, car: &Car, controls: &Controls) {
+        if !car.active || car.frozen {
+            return;
+        }
+        let control = controls.normalized();
+        // Car::step: the energy is a float and the speed limit tests the
+        // velocity before the step.
+        let (boost, energy) = (control.boost as f32, car.boost_energy as f32);
+        if boost > 0.0 && energy > 0.0 {
+            let spent = (energy - (energy - boost * 0.01f32).max(0.0)) as f64;
+            let capped = crate::math::godot_math::F2::from(car.velocity).length() as f64 > world.vehicle.max_velocity;
+            let useful = if capped || control.acceleration <= 0.0 {
+                0.0
+            } else {
+                control.acceleration
+            };
+            self.total_boost_useful += spent * useful;
+            self.total_boost_wasted += spent * (1.0 - useful);
+        } else if boost > 0.0 {
+            self.total_boost_wasted += 0.002;
         }
     }
 
@@ -232,6 +269,85 @@ impl TrainingStats {
             Some(self.collision_count as f64),
             best_lap_performance,
             Some(efficiency),
+            Some(self.total_boost_useful - self.total_boost_wasted),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn plane() -> World {
+        World::from_scene(&serde_json::from_str(include_str!("../../assets/scenes/rally_template.json")).unwrap())
+    }
+
+    fn controls(acceleration: f64, boost: f64) -> Controls {
+        Controls {
+            acceleration,
+            boost,
+            ..Controls::default()
+        }
+    }
+
+    /// `(useful, wasted)` after one `account_boost` from fresh statistics.
+    fn account(world: &World, car: &Car, controls: &Controls) -> (f64, f64) {
+        let mut stats = TrainingStats::new(0.0);
+        stats.account_boost(world, car, controls);
+        (stats.total_boost_useful, stats.total_boost_wasted)
+    }
+
+    #[test]
+    fn boost_splits_by_throttle_and_counts_the_speed_limit_and_an_empty_tank_as_waste() {
+        let world = plane();
+        let mut car = Car::new(&world, V2::ZERO, 0.0);
+        let full = (1.0f32 - 0.01f32) as f64;
+        let spent = 1.0 - full;
+        assert_eq!(account(&world, &car, &controls(1.0, 1.0)), (spent, 0.0));
+        // Inputs are clamped like the physics clamps them.
+        assert_eq!(account(&world, &car, &controls(1.5, 2.0)), (spent, 0.0));
+        let half = 1.0 - (1.0f32 - 0.5f32 * 0.01f32) as f64;
+        assert_eq!(account(&world, &car, &controls(0.25, 0.5)), (half * 0.25, half * 0.75));
+        // Boost multiplies only positive acceleration.
+        assert_eq!(account(&world, &car, &controls(0.0, 1.0)), (0.0, spent));
+        assert_eq!(account(&world, &car, &controls(-1.0, 1.0)), (0.0, spent));
+        // No boost drains nothing and recharges.
+        assert_eq!(account(&world, &car, &controls(1.0, 0.0)), (0.0, 0.0));
+        assert_eq!(account(&world, &car, &controls(1.0, -1.0)), (0.0, 0.0));
+        // Above the speed limit the step's impulse is discarded.
+        car.velocity = V2::new(0.0, -(world.vehicle.max_velocity + 1.0));
+        assert_eq!(account(&world, &car, &controls(1.0, 1.0)), (0.0, spent));
+        car.velocity = V2::new(0.0, -world.vehicle.max_velocity);
+        assert_eq!(account(&world, &car, &controls(1.0, 1.0)), (spent, 0.0));
+        // Boost held on an empty tank forgoes the recharge.
+        car.boost_energy = 0.0;
+        assert_eq!(account(&world, &car, &controls(1.0, 1.0)), (0.0, 0.002));
+        assert_eq!(account(&world, &car, &controls(1.0, 0.0)), (0.0, 0.0));
+        car.boost_energy = 1.0;
+        car.active = false;
+        assert_eq!(account(&world, &car, &controls(1.0, 1.0)), (0.0, 0.0));
+    }
+
+    #[test]
+    fn boost_net_is_a_metric_that_averages_per_second() {
+        let index = crate::training::evolution::metric_index("total_boost_net").unwrap();
+        let mut stats = TrainingStats::new(0.0);
+        stats.total_boost_useful = 0.75;
+        stats.total_boost_wasted = 0.25;
+        stats.update_count = 50;
+        assert_eq!(stats.metrics()[index], Some(0.5));
+        let network = crate::nn::network::Network::from_vector(&[1, 1], vec![0.0; 2]);
+        let result = crate::training::evolution::AgentResult {
+            network: &network,
+            metrics: stats.metrics(),
+            update_count: stats.update_count,
+        };
+        let spec = |kind: &str| crate::training::evolution::RewardSpec {
+            metric: "total_boost_net".into(),
+            weight: 1,
+            kind: kind.into(),
+        };
+        assert_eq!(result.value(&spec("default")), Some(0.5));
+        assert_eq!(result.value(&spec("average")), Some(0.1));
     }
 }

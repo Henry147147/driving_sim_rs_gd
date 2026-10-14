@@ -6,7 +6,7 @@ use altd_sim::gpu::simulation::{self as gpu_sim, GpuAgent, GpuCar, GpuSim, NearG
 use altd_sim::nn::network;
 use altd_sim::physics::car::{Car, Controls, SensorScratch, DT};
 use altd_sim::track::world::World;
-use altd_sim::training::TrainingRunner;
+use altd_sim::training::{TrainingRunner, TrainingStats};
 use rayon::prelude::*;
 use std::time::Instant;
 
@@ -269,6 +269,18 @@ pub(super) fn check_step(gpu: &Gpu, networks: usize, warmup: u64, ticks: u64) ->
         sim.step(drive, eliminate, t);
         sim.download(Some(&mut got), Some(&mut agents_back));
         seconds.0 += s.elapsed().as_secs_f64();
+        // Each tick's agents start from zero, so they hold that tick's boost.
+        let boost: Vec<(f64, f64)> = cars
+            .iter()
+            .zip(&controls)
+            .map(|(car, c)| {
+                let mut stats = TrainingStats::new(0.0);
+                if drive {
+                    stats.account_boost(&world, car, c);
+                }
+                (stats.total_boost_useful, stats.total_boost_wasted)
+            })
+            .collect();
         let s = Instant::now();
         let reports: Vec<bool> = cars
             .par_iter_mut()
@@ -290,12 +302,15 @@ pub(super) fn check_step(gpu: &Gpu, networks: usize, warmup: u64, ticks: u64) ->
             max_pairs = max_pairs.max(want[i].pair_count);
             max_contacts = max_contacts.max(want[i].contact_count);
             let (a, b) = (car_text(&got[i]), car_text(&want[i]));
-            let same = a == b && pending == reports[i];
+            let gpu_boost = (agents_back[i].total_boost_useful, agents_back[i].total_boost_wasted);
+            let same_boost =
+                gpu_boost.0.to_bits() == boost[i].0.to_bits() && gpu_boost.1.to_bits() == boost[i].1.to_bits();
+            let same = a == b && pending == reports[i] && same_boost;
             bad |= !same || got[i].error != 0;
             tally.record(got[i].error, same, || {
                 let at = a.bytes().zip(b.bytes()).position(|(x, y)| x != y).unwrap_or(0).saturating_sub(40);
-                format!("tick {t} car {i} (drive {drive}, eliminate {eliminate}) report gpu {pending} cpu {}: gpu ..{}.. cpu ..{}..",
-                    reports[i], &a[at..(at + 160).min(a.len())], &b[at..(at + 160).min(b.len())])
+                format!("tick {t} car {i} (drive {drive}, eliminate {eliminate}) report gpu {pending} cpu {}, boost gpu {gpu_boost:?} cpu {:?}: gpu ..{}.. cpu ..{}..",
+                    reports[i], boost[i], &a[at..(at + 160).min(a.len())], &b[at..(at + 160).min(b.len())])
             });
         }
         if bad {

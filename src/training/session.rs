@@ -8,9 +8,7 @@ use crate::math::vec2::V2;
 use crate::nn::network::{parameter_count, Network};
 use crate::track::world::World;
 use crate::training::ars::{ArsRecord, Elite, Head, Sampling};
-#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-use crate::training::evolution::METRIC_NAMES;
-use crate::training::evolution::{Breeding, EvolutionSettings, CROSSOVERS};
+use crate::training::evolution::{Breeding, EvolutionSettings, CROSSOVERS, METRIC_NAMES};
 use crate::training::generation_stats::{generation_stats, Spread};
 use crate::training::optimizer::Record;
 use crate::training::pyrandom::PyRandom;
@@ -543,8 +541,8 @@ impl Session {
         generation_stats(&self.runner.agents)
     }
 
-    #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-    pub(crate) fn metric_names() -> Vec<String> {
+    /// The names of `metrics`, which are also the reward metrics.
+    pub fn metric_names() -> Vec<String> {
         METRIC_NAMES.iter().map(|&s| s.to_owned()).collect()
     }
 
@@ -1511,7 +1509,7 @@ mod tests {
         s.start_with_shape(&[20, 8, 5]).unwrap();
         assert_eq!(s.car_states().len(), 6 * CAR_STATE_STRIDE);
         assert_eq!(s.sensors(0).unwrap().len(), 20);
-        assert_eq!(s.metrics(0).unwrap().len(), 14);
+        assert_eq!(s.metrics(0).unwrap().len(), METRIC_NAMES.len());
         assert_eq!(s.advance(120, false).unwrap(), 120);
         let (preserved, rewards) = s.next_generation().unwrap();
         // `on_selection_size` preserves the three selected parents.

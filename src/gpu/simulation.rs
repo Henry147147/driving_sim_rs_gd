@@ -156,6 +156,8 @@ pub struct GpuAgent {
     pub deactivated_at: u64,
     pub flags: u32,
     pub pad: u32,
+    pub total_boost_useful: f64,
+    pub total_boost_wasted: f64,
 }
 
 #[repr(C)]
@@ -1606,6 +1608,8 @@ pub fn agent_export(a: &crate::training::TrainingAgent) -> Result<GpuAgent, Stri
         deactivated_at: a.deactivated_at.unwrap_or(0),
         flags: 0,
         pad: 0,
+        total_boost_useful: s.total_boost_useful,
+        total_boost_wasted: s.total_boost_wasted,
     };
     for (slot, &d) in g.recent.iter_mut().zip(&s.recent_score_diffs) {
         *slot = d;
@@ -1658,6 +1662,8 @@ pub fn agent_import(g: &GpuAgent, a: &mut crate::training::TrainingAgent) {
     s.total_braking_frequency = g.total_braking_frequency;
     s.total_distance_from_wall = g.total_distance_from_wall;
     s.total_distance_from_center = g.total_distance_from_center;
+    s.total_boost_useful = g.total_boost_useful;
+    s.total_boost_wasted = g.total_boost_wasted;
     s.best_lap_time = on(AGENT_HAS_BEST_LAP).then_some(g.best_lap_time);
     s.idle_ticks = g.idle_ticks;
     s.previous_speed = g.previous_speed;

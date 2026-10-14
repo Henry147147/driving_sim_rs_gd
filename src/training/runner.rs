@@ -5,7 +5,7 @@ use super::optimizer::{self, Optimizer, Produced, Record};
 use super::{SensorLayout, TrainingAgent, TrainingRandom, TrainingStats};
 use crate::math::vec2::V2;
 use crate::nn::network::Network;
-use crate::physics::car::{Car, Controls, SensorScratch, DT};
+use crate::physics::car::{Car, Controls, SensorScratch};
 use crate::track::world::World;
 use crate::training::evolution::{AgentResult, EvolutionSettings, Fitness, Generation};
 use rayon::prelude::*;
@@ -376,17 +376,9 @@ impl TrainingRunner {
     }
 
     fn advance_physics(world: &World, agents: &mut [TrainingAgent], eliminate: bool, drive: bool, tick: u64) {
-        agents.par_iter_mut().for_each(|a| {
-            let was_active = a.car.active;
-            a.pending_contact |= if drive {
-                a.car.step(world, &a.controls, DT, eliminate)
-            } else {
-                a.car.passive_step(world, DT, eliminate)
-            };
-            if was_active && !a.car.active {
-                a.deactivated_at = Some(tick);
-            }
-        });
+        agents
+            .par_iter_mut()
+            .for_each(|a| a.step(world, eliminate, drive, tick));
     }
 
     pub fn results(&self) -> Vec<AgentResult<'_>> {

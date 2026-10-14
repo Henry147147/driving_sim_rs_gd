@@ -380,6 +380,7 @@ __device__ inline void record(const Car& car, Agent& agent, bool was_active, boo
 __device__ inline void step_car(const World& w, const VehicleDesc& v, Car& car, Agent& agent, bool drive, bool eliminate_on_wall,
                                 uint64_t tick) {
     bool was_active = car.flags & CAR_ACTIVE;
+    if (drive) boost_account(v, car, agent);
     bool report = car_step(w, v, car, agent.controls, drive, eliminate_on_wall);
     record(car, agent, was_active, report, tick);
 }
@@ -423,6 +424,7 @@ __device__ inline void begin_car(const World& w, const VehicleDesc& v, Car* cars
     StepCarry k{};
     uint32_t count = 0;
     if (valid) {
+        if (drive) boost_account(v, cars[i], agents[i]);
         k = step_begin(w, v, cars[i], agents[i].controls, drive);
         count = cars[i].pair_count;
     }
@@ -1317,7 +1319,7 @@ ALTD_API int altd_gpu_sim_window(Sim* s, const WindowArgs* a, uint64_t* executed
     return 0;
 }
 
-ALTD_API int altd_gpu_version() { return 11; }
+ALTD_API int altd_gpu_version() { return 12; }
 
 // The runtime the library was built for: "HIP" (AMD) or "CUDA" (NVIDIA).
 ALTD_API const char* altd_gpu_platform() { return ALTD_PLATFORM; }

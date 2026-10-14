@@ -31,11 +31,11 @@ fn load_car_state(index: u32) {
     sim_world=load_World(params.world_offset);
     sim_vehicle=load_VehicleDesc(params.vehicle_offset);
     load_Car(index*CAR_WORDS);
-    load_Agent(index*94u);
+    load_Agent(index*AGENT_WORDS);
 }
 fn save_car_state(index: u32) {
     store_Car(index*CAR_WORDS);
-    store_Agent(index*94u);
+    store_Agent(index*AGENT_WORDS);
 }
 
 fn eligible(index:u32) -> bool {
@@ -90,7 +90,7 @@ fn forward_kernel(@builtin(workgroup_id) group:vec3<u32>, @builtin(local_invocat
  if(enabled && j<5u){
   let src=i32(world_data[params.control_offset+j]);
   var control=F64_ZERO;if(src>=0){control=layer_input[u32(src)];}
-  agents[i*94u+j*2u]=control.x;agents[i*94u+j*2u+1u]=control.y;
+  agents[i*AGENT_WORDS+j*2u]=control.x;agents[i*AGENT_WORDS+j*2u+1u]=control.y;
  }
 }
 @compute @workgroup_size(32)
@@ -110,15 +110,17 @@ fn stop_kernel() {
 @compute @workgroup_size(32)
 fn reset_kernel(@builtin(global_invocation_id) id:vec3<u32>) {
  let i=id.x;if(i>=params.population){return;}
- agents[i*94u+92u]=agents[i*94u+92u] & ~AGENT_HAS_DEACTIVATED;
- agents[i*94u+90u]=0u;agents[i*94u+91u]=0u;
+ let a=i*AGENT_WORDS;
+ agents[a+AGENT_FLAGS_WORD]=agents[a+AGENT_FLAGS_WORD] & ~AGENT_HAS_DEACTIVATED;
+ agents[a+AGENT_DEACTIVATED_AT_WORD]=0u;agents[a+AGENT_DEACTIVATED_AT_WORD+1u]=0u;
 }
 @compute @workgroup_size(32)
 fn drive_kernel(@builtin(global_invocation_id) id:vec3<u32>) {
  let i=id.x;if(i>=params.population || results[1]!=0u){return;}
  load_car_state(i);
+ boost_account();
  let carry=step_begin(sim_agent.controls,true);
- store_StepCarry(4u+i*128u,carry);store_Car(i*CAR_WORDS);
+ store_StepCarry(4u+i*128u,carry);save_car_state(i);
 }
 @compute @workgroup_size(32)
 fn step_kernel(@builtin(global_invocation_id) id:vec3<u32>) {

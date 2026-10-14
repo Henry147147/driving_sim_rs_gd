@@ -60,7 +60,9 @@ pub(crate) fn stats_bits(s: &TrainingStats) -> Value {
         "best_lap_time":s.best_lap_time.map(bit), "all_laps_time_sum":s.all_laps_time_sum.map(bit),
         "counts":[s.update_count,s.collision_count,s.idle_ticks,s.previous_lap_count,s.lap_start_tick,s.drift_ticks],
         "recent_score_diffs":bits(s.recent_score_diffs.iter().copied()),
-        "metrics":s.metrics().iter().map(|v|v.map(bit)).collect::<Vec<_>>(),
+        // The generated captures predate total_boost_net (stats tests cover it):
+        // compare the 14 metrics they recorded.
+        "metrics":s.metrics()[..14].iter().map(|v|v.map(bit)).collect::<Vec<_>>(),
     })
 }
 pub(crate) fn session_snapshot(session: &Session) -> Value {
