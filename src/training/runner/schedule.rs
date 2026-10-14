@@ -1,6 +1,6 @@
-//! Preserve car-major independent windows and tick-major shared physics windows.
+//! Car-major training windows: each car runs a window on its own.
 
-use super::{ControlSlot, Mode, TrainingRunner};
+use super::{ControlSlot, TrainingRunner};
 use crate::physics::car::{Controls, DT};
 use crate::track::world::World;
 use crate::training::{SensorLayout, TrainingAgent};
@@ -131,143 +131,91 @@ impl TrainingRunner {
         }
         if self.user_paused {
             for _ in 0..ticks {
-                Self::advance_physics(
-                    &self.world,
-                    &mut self.agents,
-                    &mut self.physics,
-                    self.eliminate_on_wall,
-                    false,
-                    self.tick,
-                );
+                Self::advance_physics(&self.world, &mut self.agents, self.eliminate_on_wall, false, self.tick);
             }
             return ticks;
         }
         let start_tick = self.tick;
         let start_batch = self.batch_index;
         let bpt = self.batches_per_tick();
+        let stats_phase = self.stats_phase;
+        let limit_reached = |k: u64| {
+            let first = if stats_phase == 0 { 6 } else { stats_phase };
+            time_limit.is_some_and(|limit| ((start_tick + k - first) / 6) as f64 * 0.1 >= limit)
+        };
         let mut agents = std::mem::take(&mut self.agents);
-        let mut physics = self.physics.take();
         for agent in &mut agents {
             agent.deactivated_at = None;
         }
         let batch_at = |k: u64| (start_batch + ((k - 1) as usize % 8) * bpt) % 8;
-        let executed;
-        let mut transition_without_drive = false;
-        {
+        let (executed, transition_without_drive) = if agents.is_empty() {
+            // Without cars, every statistics tick finds all of them inactive.
+            (1..=ticks)
+                .find(|&k| (start_tick + k) % 6 == stats_phase && (stop_when_inactive || limit_reached(k)))
+                .map_or((ticks, false), |k| (k, true))
+        } else {
+            // Car-major: each car runs the whole window alone, which keeps its
+            // network and state in cache and avoids per-tick barriers. A car stops
+            // before driving at the first statistics tick where the time
+            // limit is reached or, with `stop_when_inactive`, it is inactive.
+            // Cars never reactivate within a window, so a tick-major loop
+            // would stop at the latest of these ticks, if every car
+            // stopped; cars that stopped earlier then catch up to it.
             let schedule = self.schedule_for(agents.len());
-            match self.mode {
-                Mode::Independent if physics.is_none() && !agents.is_empty() => {
-                    // Car-major: each car runs the whole window alone, which keeps its
-                    // network and state in cache and avoids per-tick barriers. A car stops
-                    // before driving at the first statistics tick where the time
-                    // limit is reached or, with `stop_when_inactive`, it is inactive.
-                    // Cars never reactivate within a window, so the tick-major loop
-                    // below would stop at the latest of these ticks, if every car
-                    // stopped; cars that stopped earlier then catch up to it.
-                    let stats_phase = self.stats_phase;
-                    let limit_reached = |k: u64| {
-                        let first = if stats_phase == 0 { 6 } else { stats_phase };
-                        time_limit.is_some_and(|limit| ((start_tick + k - first) / 6) as f64 * 0.1 >= limit)
-                    };
-                    // Runs ticks `from..=to`; tick `from`'s statistics already ran
-                    // when `resume` is set. Returns the tick at which `stop` held.
-                    let run = |index: usize,
-                               agent: &mut TrainingAgent,
-                               from: u64,
-                               to: u64,
-                               resume: bool,
-                               stop: &dyn Fn(u64, &TrainingAgent) -> bool| {
-                        for k in from..=to {
-                            let tick = start_tick + k;
-                            if !(resume && k == from) {
-                                schedule.update_stats(agent, tick);
-                                if tick % 6 == stats_phase && stop(k, agent) {
-                                    return Some(k);
-                                }
-                            }
-                            schedule.drive_agent(index, agent, tick, batch_at(k));
-                        }
-                        None
-                    };
-                    let stops: Vec<Option<u64>> = agents
-                        .par_iter_mut()
-                        .with_max_len(1)
-                        .enumerate()
-                        .map(|(index, agent)| {
-                            run(index, agent, 1, ticks, false, &|k, agent| {
-                                limit_reached(k) || (stop_when_inactive && !agent.car.active)
-                            })
-                        })
-                        .collect();
-                    let end = stops.iter().try_fold(0, |end, stop| stop.map(|k| end.max(k)));
-                    agents
-                        .par_iter_mut()
-                        .with_max_len(1)
-                        .enumerate()
-                        .zip(&stops)
-                        .for_each(|((index, agent), stop)| {
-                            let Some(stopped) = *stop else { return };
-                            match end {
-                                Some(end) if stopped < end => {
-                                    run(index, agent, stopped, end, true, &|k, agent| {
-                                        assert!(!agent.car.active, "a car reactivated within a window");
-                                        k == end
-                                    });
-                                }
-                                Some(_) => {}
-                                None => {
-                                    run(index, agent, stopped, ticks, true, &|_, _| false);
-                                }
-                            }
-                        });
-                    transition_without_drive = end.is_some();
-                    executed = end.unwrap_or(ticks);
-                }
-                _ => {
-                    let mut k = 0;
-                    while k < ticks {
-                        k += 1;
-                        let tick = start_tick + k;
-                        let batch_index = batch_at(k);
-                        agents
-                            .par_iter_mut()
-                            .for_each(|agent| schedule.update_stats(agent, tick));
-                        if tick % 6 == self.stats_phase {
-                            let first = if self.stats_phase == 0 { 6 } else { self.stats_phase };
-                            let elapsed = ((tick - first) / 6) as f64 * 0.1;
-                            if (stop_when_inactive && agents.iter().all(|a| !a.car.active))
-                                || time_limit.is_some_and(|limit| elapsed >= limit)
-                            {
-                                transition_without_drive = true;
-                                break;
-                            }
-                        }
-                        if physics.is_some() {
-                            agents
-                                .par_iter_mut()
-                                .enumerate()
-                                .for_each(|(index, agent)| schedule.update_controls(index, agent, batch_index));
-                            Self::advance_physics(
-                                schedule.world,
-                                &mut agents,
-                                &mut physics,
-                                self.eliminate_on_wall,
-                                true,
-                                tick,
-                            );
-                        } else {
-                            agents
-                                .par_iter_mut()
-                                .enumerate()
-                                .for_each(|(index, agent)| schedule.drive_agent(index, agent, tick, batch_index));
+            // Runs ticks `from..=to`; tick `from`'s statistics already ran
+            // when `resume` is set. Returns the tick at which `stop` held.
+            let run = |index: usize,
+                       agent: &mut TrainingAgent,
+                       from: u64,
+                       to: u64,
+                       resume: bool,
+                       stop: &dyn Fn(u64, &TrainingAgent) -> bool| {
+                for k in from..=to {
+                    let tick = start_tick + k;
+                    if !(resume && k == from) {
+                        schedule.update_stats(agent, tick);
+                        if tick % 6 == stats_phase && stop(k, agent) {
+                            return Some(k);
                         }
                     }
-                    executed = k;
+                    schedule.drive_agent(index, agent, tick, batch_at(k));
                 }
-            }
-        }
+                None
+            };
+            let stops: Vec<Option<u64>> = agents
+                .par_iter_mut()
+                .with_max_len(1)
+                .enumerate()
+                .map(|(index, agent)| {
+                    run(index, agent, 1, ticks, false, &|k, agent| {
+                        limit_reached(k) || (stop_when_inactive && !agent.car.active)
+                    })
+                })
+                .collect();
+            let end = stops.iter().try_fold(0, |end, stop| stop.map(|k| end.max(k)));
+            agents
+                .par_iter_mut()
+                .with_max_len(1)
+                .enumerate()
+                .zip(&stops)
+                .for_each(|((index, agent), stop)| {
+                    let Some(stopped) = *stop else { return };
+                    match end {
+                        Some(end) if stopped < end => {
+                            run(index, agent, stopped, end, true, &|k, agent| {
+                                assert!(!agent.car.active, "a car reactivated within a window");
+                                k == end
+                            });
+                        }
+                        Some(_) => {}
+                        None => {
+                            run(index, agent, stopped, ticks, true, &|_, _| false);
+                        }
+                    }
+                });
+            (end.unwrap_or(ticks), end.is_some())
+        };
         self.agents = agents;
-        self.physics = physics;
         self.tick = start_tick + executed;
         self.batch_index = (start_batch + ((executed as usize - transition_without_drive as usize) % 8) * bpt) % 8;
         executed

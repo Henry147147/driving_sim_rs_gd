@@ -23,7 +23,6 @@ use train::train;
 
 use altd_sim::math::profile::MathProfile;
 use altd_sim::track::world::World;
-use altd_sim::training::Mode;
 use clap::Parser;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -36,7 +35,6 @@ fn main() {
     }
     pool.build_global().expect("thread pool");
     let threads = rayon::current_num_threads();
-    let mode: Mode = cli.mode.into();
     let math = cli.math_profile.unwrap_or_else(MathProfile::detect);
     match cli.command {
         Command::Bench {
@@ -64,7 +62,6 @@ fn main() {
                 seed,
                 batch_count,
                 spawn_index,
-                mode,
                 threads,
                 dump_state.as_deref(),
                 math,
@@ -119,7 +116,6 @@ fn main() {
                 batch_count,
                 flag(eliminate_on_wall, no_eliminate_on_wall),
                 flag(idle_eliminate, no_idle_eliminate),
-                mode,
                 threads,
                 game_rng_state.as_deref().map(load).as_ref(),
                 &tracks,
@@ -210,7 +206,7 @@ fn main() {
                 gpu,
                 math_profile: cli.math_profile,
             };
-            train_scratch(&config, mode, threads);
+            train_scratch(&config, threads);
         }
         Command::Evaluate {
             network,
@@ -259,7 +255,6 @@ fn main() {
                 &load(&model),
                 batch_count,
                 !new_vehicle,
-                mode,
             );
             write_report(&report, &result);
             print_without(&result, "rows");

@@ -797,8 +797,8 @@ pub fn place_tile_map(scene: &mut Value, position: [i32; 2]) {
     }
 }
 
-/// A saved game track as a training scene for independent cars, using the
-/// vehicle and physics of `template`.
+/// A saved game track as a training scene without the native broadphase,
+/// which every backend runs, using the vehicle and physics of `template`.
 pub fn saved_track_scene(saved: &Value, name: &str, template: &Value, math: MathProfile) -> Result<Value, String> {
     let mut scene = GeneratedTrack::from_saved(saved, name)?.to_scene(template, math);
     place_tile_map(&mut scene, GAME_TILE_MAP_POSITION);

@@ -1,9 +1,8 @@
 //! Game training scheduler, statistics, and population lifecycle.
 //!
-//! Independent mode runs each car through a window, then catches inactive cars
-//! up to the final tick. Native shared broadphase scenes use a tick-major loop
-//! to preserve contact ordering. Deactivated cars retain passive physics, while
-//! their driving metrics stop updating.
+//! Each car runs through a window on its own, then inactive cars catch up to
+//! the final tick. Deactivated cars retain passive physics, while their
+//! driving metrics stop updating.
 
 pub mod batch_evaluation;
 #[cfg(not(target_arch = "wasm32"))]
@@ -29,7 +28,7 @@ pub use lineage::TrainingRandom;
 #[cfg(any(feature = "server", all(target_arch = "wasm32", feature = "wasm")))]
 pub(crate) use runner::CAR_STATE_FIELDS;
 pub(crate) use runner::CAR_STATE_STRIDE;
-pub use runner::{export_state_into, Mode, TrainingRunner};
+pub use runner::{export_state_into, TrainingRunner};
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use sensors::{sensor_type, vision_angle};
 pub use sensors::{vision_length, SensorLayout};

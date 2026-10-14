@@ -1,16 +1,13 @@
-#[path = "vehicle.rs"]
-mod vehicle;
 use altd_sim::{
     math::vec2::V2,
-    physics::car::{Car, Controls},
-    physics::simulation::NativePopulation,
+    physics::car::{Car, Controls, DT},
     track::world::World,
 };
 use serde_json::{json, Value};
-use std::sync::Arc;
 
+/// Replays a game population capture with every car stepped on its own.
 pub(crate) fn verify(scene: &Value, states: &[Value], controls: &[Value]) -> Value {
-    let mut world = Arc::new(World::from_scene(scene));
+    let mut world = World::from_scene(scene);
     let count = states.last().unwrap()["tick"].as_u64().unwrap() as usize + 1;
     let mut frames = vec![Vec::new(); count];
     let mut outputs = vec![Vec::new(); count];
@@ -20,33 +17,30 @@ pub(crate) fn verify(scene: &Value, states: &[Value], controls: &[Value]) -> Val
     for control in controls {
         outputs[control["tick"].as_u64().unwrap() as usize].push(control);
     }
-    let cars = frames[0].iter().map(|s| vehicle::restore(&world, s)).collect();
-    let mut sim = NativePopulation::new(world.clone(), cars);
+    let mut cars: Vec<Car> = frames[0].iter().map(|s| vehicle::restore(&world, s)).collect();
     for _ in 0..8 {
-        sim.passive_step(false);
+        for car in &mut cars {
+            car.passive_step(&world, DT, false);
+        }
     }
     let mut errors = Vec::new();
     let mut exact = 0;
     let reset_tick = scene["reset_tick"].as_u64().unwrap_or(90) as usize;
     let empty = Vec::new();
-    let resizes = scene["resize_events"].as_array().unwrap_or(&empty);
     let redraws = scene["redraw_events"].as_array().unwrap_or(&empty);
-    let queries = scene["wall_queries"].as_array().unwrap_or(&empty);
     for tick in 0..frames.len() - 1 {
-        if let Some(event) = redraws
-            .iter()
-            .find(|e| resizes.is_empty() && e["tick"].as_u64() == Some(tick as u64))
-        {
-            world = Arc::new(World::from_scene(&event["scene"]));
-            sim.redraw_tilemap(world.clone());
+        if let Some(event) = redraws.iter().find(|e| e["tick"].as_u64() == Some(tick as u64)) {
+            // A new track invalidates every car's pairs and warm contacts.
+            world = World::from_scene(&event["scene"]);
             let position = V2::from(altd_sim::track::curve::json_vector(&event["spawn"]));
             let rotation = event["rotation"].as_f64().unwrap();
-            for car in &mut sim.cars {
+            for car in &mut cars {
+                car.clear_track_contacts();
                 car.queue_reset(position, rotation);
             }
         }
-        if resizes.is_empty() && redraws.is_empty() && tick == reset_tick {
-            for car in &mut sim.cars {
+        if redraws.is_empty() && tick == reset_tick {
+            for car in &mut cars {
                 let position = scene
                     .get("reset_position")
                     .map(|v| V2::from(altd_sim::track::curve::json_vector(v)))
@@ -70,50 +64,23 @@ pub(crate) fn verify(scene: &Value, states: &[Value], controls: &[Value]) -> Val
                 }
             })
             .collect();
-        let waiting = if !redraws.is_empty() {
+        let waiting = if redraws.is_empty() {
+            (reset_tick..reset_tick + 8).contains(&tick)
+        } else {
             redraws.iter().any(|e| {
                 let t = e["tick"].as_u64().unwrap() as usize;
                 (t..t + 8).contains(&tick)
             })
-        } else if resizes.is_empty() {
-            (reset_tick..reset_tick + 8).contains(&tick)
-        } else {
-            resizes.iter().any(|e| {
-                let t = e["tick"].as_u64().unwrap() as usize;
-                (t..t + 8).contains(&tick)
-            })
         };
-        if waiting {
-            sim.passive_step(false);
-        } else {
-            sim.step(&controls, false);
-        }
-        if let Some(event) = resizes.iter().find(|e| e["tick"].as_u64() == Some((tick + 1) as u64)) {
-            if let Some(redraw) = redraws.iter().find(|e| e["tick"] == event["tick"]) {
-                world = Arc::new(World::from_scene(&redraw["scene"]));
-                sim.redraw_tilemap(world.clone());
-            }
-            let count = event["count"].as_u64().unwrap() as usize;
-            let position = V2::from(altd_sim::track::curve::json_vector(&event["spawn"]));
-            let rotation = event["rotation"].as_f64().unwrap();
-            for car in sim.cars.iter_mut().take(count) {
-                car.queue_reset(position, rotation);
-            }
-            if count < sim.cars.len() {
-                sim.truncate(count);
+        for (i, car) in cars.iter_mut().enumerate() {
+            if waiting {
+                car.passive_step(&world, DT, false);
             } else {
-                let cars = (sim.cars.len()..count)
-                    .map(|_| {
-                        let mut car = Car::new(&world, position, rotation);
-                        car.queue_reset(position, rotation);
-                        car
-                    })
-                    .collect::<Vec<_>>();
-                sim.extend_cars(cars);
+                car.step(&world, &controls[i], DT, false);
             }
         }
-        assert_eq!(sim.cars.len(), frames[tick + 1].len());
-        for (i, (car, s)) in sim.cars.iter().zip(&frames[tick + 1]).enumerate() {
+        assert_eq!(cars.len(), frames[tick + 1].len());
+        for (i, (car, s)) in cars.iter().zip(&frames[tick + 1]).enumerate() {
             let bad = vehicle::differences(car, s);
             if bad.as_object().unwrap().is_empty() {
                 exact += 1;
@@ -121,12 +88,8 @@ pub(crate) fn verify(scene: &Value, states: &[Value], controls: &[Value]) -> Val
                 errors.push(json!({"tick":tick+1,"car":i,"differences":bad}));
             }
         }
-        if let Some(query) = queries.iter().find(|q| q["tick"].as_u64() == Some((tick + 1) as u64)) {
-            let actual = sim.query_wall_candidates(V2::new(-16384.0, -16384.0), V2::new(16384.0, 16384.0));
-            if json!(actual) != query["order"] {
-                errors.push(json!({"tick":tick+1,"wall_order":actual,"expected":query["order"]}));
-            }
-        }
     }
     json!({"transitions":states.len()-frames[0].len(),"exact":exact,"errors":errors})
 }
+#[path = "vehicle.rs"]
+mod vehicle;

@@ -8,7 +8,7 @@ Three comparisons answer different questions:
 - Serial versus threaded WASM checks cover states, sensors, controls, metrics, rewards, summaries and binary checkpoints, including exchange between the two packages.
 - WebGPU versus WASM checks validate query or full-window device results against the WASM CPU implementation.
 
-Expanded native parity is incomplete. On the public generated Formula scenario, serial and threaded WASM matched each other in 253,341 values per mode, including the optional score aggregates, but both differed from native in 2,285 values per mode. Those differences comprised 703 controls, 405 metrics and 1,177 checkpoint bytes. The original captured-scene baseline had 2,532 native differences with the same exact serial/threaded equality. Counts depend on the scenario, build and checkpoint representation. `STRICT_NATIVE=1` makes the browser test fail on any expanded native difference.
+Expanded native parity is incomplete. On the public generated Formula scenario, serial and threaded WASM matched each other in 253,341 values, including the optional score aggregates, but both differed from native in 2,285 values. Those differences comprised 703 controls, 405 metrics and 1,177 checkpoint bytes. The original captured-scene baseline had 2,532 native differences with the same exact serial/threaded equality. Counts depend on the scenario, build and checkpoint representation. `STRICT_NATIVE=1` makes the browser test fail on any expanded native difference.
 
 ## Device arithmetic
 
@@ -22,6 +22,6 @@ WGSL permits device-dependent subnormal and NaN behavior. Raw division fixtures 
 
 Threaded WASM uses imported shared memory and a 2 GiB growth ceiling. This is a maximum, not an initial allocation. Workers need stack and TLS memory; an application's separately loaded preview module has its own memory. Shared-memory packages require cross-origin isolation and complete generated helper snippets.
 
-A host must await GPU windows before mutating the Session. A failed full-GPU window keeps the last committed WASM state so it can continue on CPU. Paused physics and native shared broadphase are unsupported by full WebGPU. The raycaster has one readback per tick; full simulation batches bounded windows, which changes the population size at which device work can pay off.
+A host must await GPU windows before mutating the Session. A failed full-GPU window keeps the last committed WASM state so it can continue on CPU. Paused physics and the native broadphase are unsupported by full WebGPU. The raycaster has one readback per tick; full simulation batches bounded windows, which changes the population size at which device work can pay off.
 
 [The WASM guide](../wasm/README.md) contains build commands, initialization and the browser harness. [Performance notes](performance.md) distinguish CPU worker scaling, startup and WebGPU measurements.

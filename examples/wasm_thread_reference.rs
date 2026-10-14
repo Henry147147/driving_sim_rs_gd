@@ -44,33 +44,28 @@ fn main() {
         .iter()
         .map(|v| v.as_u64().unwrap() as usize)
         .collect();
-    let mut modes = serde_json::Map::new();
-    for mode in ["independent", "lockstep"] {
-        let mut options = SessionOptions::from_json(&scenario["options"].to_string()).unwrap();
-        options.mode = mode.into();
-        let mut session = Session::new(
-            &read(scenario["scene"].as_str().unwrap()),
-            &read(scenario["network"].as_str().unwrap()),
-            &read(scenario["model"].as_str().unwrap()),
-            options,
-        )
-        .unwrap();
-        session.start_with_shape(&shape).unwrap();
-        let mut steps = Vec::new();
-        for generation in 0..3 {
-            for ticks in [1, 5, 54, 180] {
-                let executed = session.advance(ticks, false).unwrap();
-                steps.push(json!({ "executed": executed, "state": snapshot(&session) }));
-            }
-            let (preserved, rewards) = session.next_generation().unwrap();
-            steps.push(json!({ "preserved": preserved, "rewards": bits(rewards), "state": snapshot(&session) }));
-            assert_eq!(session.runner.generation, generation + 1);
+    let options = SessionOptions::from_json(&scenario["options"].to_string()).unwrap();
+    let mut session = Session::new(
+        &read(scenario["scene"].as_str().unwrap()),
+        &read(scenario["network"].as_str().unwrap()),
+        &read(scenario["model"].as_str().unwrap()),
+        options,
+    )
+    .unwrap();
+    session.start_with_shape(&shape).unwrap();
+    let mut steps = Vec::new();
+    for generation in 0..3 {
+        for ticks in [1, 5, 54, 180] {
+            let executed = session.advance(ticks, false).unwrap();
+            steps.push(json!({ "executed": executed, "state": snapshot(&session) }));
         }
-        modes.insert(mode.into(), Value::from(steps));
+        let (preserved, rewards) = session.next_generation().unwrap();
+        steps.push(json!({ "preserved": preserved, "rewards": bits(rewards), "state": snapshot(&session) }));
+        assert_eq!(session.runner.generation, generation + 1);
     }
     if let Some(parent) = Path::new(out).parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).unwrap();
     }
-    std::fs::write(out, Value::Object(modes).to_string()).unwrap();
+    std::fs::write(out, Value::from(steps).to_string()).unwrap();
     println!("wrote {out}");
 }

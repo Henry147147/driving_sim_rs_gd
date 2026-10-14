@@ -103,7 +103,6 @@ pub struct Car {
     reset_acceleration: V2,
     reset_right: bool,
     pending_transform_reset: Option<(V2, f64)>,
-    pending_callback: Option<NativeCallback>,
     pub collision_count: u64,
     pub wall_contacts: Vec<Contact>,
     previous_contacts: Vec<Contact>,
@@ -215,18 +214,6 @@ impl SensorScratch {
 }
 
 impl Car {
-    pub(crate) fn update_native_shape(&mut self, world: &World) -> crate::physics::broadphase::Aabb {
-        self.scratch
-            .update_shape(&world.vehicle, self.position, self.body_basis);
-        self.scratch.shape_bounds()
-    }
-    pub(crate) fn native_shape_bounds(&self) -> crate::physics::broadphase::Aabb {
-        self.scratch.shape_bounds()
-    }
-    pub(crate) fn set_native_pairs(&mut self, pairs: &[usize], wall_first: &[bool], epochs: &[u64]) {
-        self.scratch
-            .set_external_pairs(pairs, wall_first, epochs, &mut self.previous_contacts);
-    }
     /// `Simulator(config, track, position, rotation)`. The per-tick
     /// `Simulator.score` tracker does not affect training, so it is omitted.
     pub fn new(world: &World, position: V2, rotation: f64) -> Car {
@@ -256,7 +243,6 @@ impl Car {
             reset_acceleration: V2::ZERO,
             reset_right: false,
             pending_transform_reset: None,
-            pending_callback: None,
             collision_count: 0,
             wall_contacts: Vec::new(),
             previous_contacts: Vec::new(),
@@ -397,7 +383,7 @@ impl Car {
     }
 
     /// Shape indices and warm contacts belong to the track that created them.
-    pub(crate) fn clear_track_contacts(&mut self) {
+    pub fn clear_track_contacts(&mut self) {
         self.wall_contacts.clear();
         self.previous_contacts.clear();
         self.scratch = CollisionScratch::default();
@@ -419,43 +405,15 @@ impl Car {
 
     /// `Simulator.step(raw, dt, eliminate_on_wall)`. Returns wall contact status.
     pub fn step(&mut self, world: &World, raw: &Controls, dt: f64, eliminate_on_wall: bool) -> bool {
-        self.step_internal(world, raw, dt, eliminate_on_wall, true, false)
+        self.step_internal(world, raw, dt, eliminate_on_wall, true)
     }
 
     /// Native physics continues while the generation waits, without wheel updates.
     pub fn passive_step(&mut self, world: &World, dt: f64, eliminate_on_wall: bool) -> bool {
-        self.step_internal(world, &Controls::default(), dt, eliminate_on_wall, false, false)
+        self.step_internal(world, &Controls::default(), dt, eliminate_on_wall, false)
     }
 
-    pub(crate) fn native_integrate(
-        &mut self,
-        world: &World,
-        raw: &Controls,
-        dt: f64,
-        eliminate_on_wall: bool,
-        drive: bool,
-    ) {
-        assert!(self.pending_callback.is_none());
-        self.step_internal(world, raw, dt, eliminate_on_wall, drive, true);
-    }
-
-    pub(crate) fn native_callback(&mut self, world: &World) -> bool {
-        let callback = self
-            .pending_callback
-            .take()
-            .expect("native integration must precede callback");
-        self.finish_callback(world, callback)
-    }
-
-    fn step_internal(
-        &mut self,
-        world: &World,
-        raw: &Controls,
-        dt: f64,
-        eliminate_on_wall: bool,
-        drive: bool,
-        defer_callback: bool,
-    ) -> bool {
+    fn step_internal(&mut self, world: &World, raw: &Controls, dt: f64, eliminate_on_wall: bool, drive: bool) -> bool {
         assert!(dt > 0.0, "dt must be positive");
         let was_active = self.active;
         let drive = drive && !self.frozen;
@@ -629,10 +587,6 @@ impl Car {
             was_active,
             eliminate_on_wall,
         };
-        if defer_callback {
-            self.pending_callback = Some(callback);
-            return false;
-        }
         self.finish_callback(world, callback)
     }
 
@@ -924,8 +878,8 @@ impl Car {
         if self.frozen || self.pending_velocity_store {
             return Err("frozen cars are not supported".into());
         }
-        if self.pending_transform_reset.is_some() || self.pending_callback.is_some() {
-            return Err("pending transform reset or native callback".into());
+        if self.pending_transform_reset.is_some() {
+            return Err("pending transform reset".into());
         }
         if self.wheels.len() > MAX_WHEELS {
             return Err(format!("{} wheels exceed MAX_WHEELS", self.wheels.len()));

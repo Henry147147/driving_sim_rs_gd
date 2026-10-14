@@ -4,7 +4,6 @@ use super::io::load;
 use altd_sim::math::profile::MathProfile;
 use altd_sim::track::training_tracks::RandomTrainingTrackSettings;
 use altd_sim::training::evolution::RewardSpec;
-use altd_sim::training::Mode;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -19,10 +18,6 @@ pub(super) struct Cli {
     /// Worker threads (default: all logical CPUs in the affinity mask).
     #[arg(long, global = true)]
     pub(super) threads: Option<usize>,
-    /// Training execution: each car runs a whole window independently, or all
-    /// cars advance one tick at a time like `TrainingRunner.step`.
-    #[arg(long, global = true, value_enum, default_value_t = ModeArg::Independent)]
-    pub(super) mode: ModeArg,
     /// The C runtime math to reproduce: proton (Linux and macOS through
     /// Proton), win10-fma3 (Windows 10, Windows 11 up to 23H2) or win11-fma3
     /// (Windows 11 24H2 and later). Default: this machine's; train-scratch
@@ -31,12 +26,6 @@ pub(super) struct Cli {
     pub(super) math_profile: Option<MathProfile>,
     #[command(subcommand)]
     pub(super) command: Command,
-}
-
-#[derive(Clone, Copy, ValueEnum)]
-pub(super) enum ModeArg {
-    Independent,
-    Lockstep,
 }
 
 #[derive(Clone, Copy, PartialEq, ValueEnum)]
@@ -94,15 +83,6 @@ impl TrackOptions {
             .unwrap_or_else(|e| panic!("--random-track-settings: {e}"));
         assert!(self.track_buffer_size > 0, "--track-buffer-size must be positive");
         Some(settings)
-    }
-}
-
-impl From<ModeArg> for Mode {
-    fn from(mode: ModeArg) -> Mode {
-        match mode {
-            ModeArg::Independent => Mode::Independent,
-            ModeArg::Lockstep => Mode::Lockstep,
-        }
     }
 }
 

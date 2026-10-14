@@ -133,8 +133,8 @@ impl TrainingRunner {
     /// Why the GPU cannot run this runner's windows, if it cannot.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn check_gpu_window(&self) -> Result<(), String> {
-        if self.user_paused || self.physics.is_some() {
-            return Err("the GPU runner does not model paused or native-broadphase windows".into());
+        if self.user_paused || self.world.track.native_broadphase {
+            return Err("the GPU runner does not model paused windows or the native broadphase".into());
         }
         if self.agents.is_empty() {
             return Err("no agents".into());

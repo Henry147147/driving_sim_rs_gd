@@ -26,38 +26,34 @@ function compare(actual, expected, path = '', report = { values: 0, mismatches: 
     return report;
 }
 async function parity(lib, single, scene, network, model, scenario, reference) {
-    const results = {};
-    for (const mode of ['independent', 'lockstep']) {
-        const sim = new lib.Simulation(scene, network, model, { ...scenario.options, mode });
-        const steps = [], serialSteps = [];
-        const baseline = new single.Simulation(scene, network, model, { ...scenario.options, mode });
-        try {
-            sim.startWithShape(Uint32Array.from(scenario.shape));
-            baseline.startWithShape(Uint32Array.from(scenario.shape));
-            for (let generation = 0; generation < 3; generation++) {
-                for (const ticks of [1, 5, 54, 180]) {
-                    steps.push({ executed: sim.advance(ticks, false), state: snapshot(sim) });
-                    serialSteps.push({ executed: baseline.advance(ticks, false), state: snapshot(baseline) });
-                }
-                const next = sim.nextGeneration();
-                steps.push({ preserved: next.preservedCount, rewards: bits(next.rewards), state: snapshot(sim) });
-                const serialNext = baseline.nextGeneration();
-                serialSteps.push({ preserved: serialNext.preservedCount, rewards: bits(serialNext.rewards), state: snapshot(baseline) });
-                // Both directions use the same binary RNG/network checkpoint.
-                const serial = new single.Simulation(scene, network, model, { ...scenario.options, mode });
-                const resumed = new lib.Simulation(scene, network, model, { ...scenario.options, mode });
-                try {
-                    serial.restoreCheckpointBytes(sim.checkpointBytes());
-                    resumed.restoreCheckpointBytes(serial.checkpointBytes());
-                    serial.advance(12, false); resumed.advance(12, false);
-                    const check = compare(snapshot(resumed), snapshot(serial));
-                    if (check.mismatches) throw new Error(`checkpoint resume differed: ${JSON.stringify(check.first)}`);
-                } finally { serial.free(); resumed.free(); }
+    const sim = new lib.Simulation(scene, network, model, scenario.options);
+    const steps = [], serialSteps = [];
+    const baseline = new single.Simulation(scene, network, model, scenario.options);
+    try {
+        sim.startWithShape(Uint32Array.from(scenario.shape));
+        baseline.startWithShape(Uint32Array.from(scenario.shape));
+        for (let generation = 0; generation < 3; generation++) {
+            for (const ticks of [1, 5, 54, 180]) {
+                steps.push({ executed: sim.advance(ticks, false), state: snapshot(sim) });
+                serialSteps.push({ executed: baseline.advance(ticks, false), state: snapshot(baseline) });
             }
-            results[mode] = { ...compare(steps, serialSteps), native: compare(steps, reference[mode]), serialNative: compare(serialSteps, reference[mode]) };
-        } finally { sim.free(); baseline.free(); }
-    }
-    return results;
+            const next = sim.nextGeneration();
+            steps.push({ preserved: next.preservedCount, rewards: bits(next.rewards), state: snapshot(sim) });
+            const serialNext = baseline.nextGeneration();
+            serialSteps.push({ preserved: serialNext.preservedCount, rewards: bits(serialNext.rewards), state: snapshot(baseline) });
+            // Both directions use the same binary RNG/network checkpoint.
+            const serial = new single.Simulation(scene, network, model, scenario.options);
+            const resumed = new lib.Simulation(scene, network, model, scenario.options);
+            try {
+                serial.restoreCheckpointBytes(sim.checkpointBytes());
+                resumed.restoreCheckpointBytes(serial.checkpointBytes());
+                serial.advance(12, false); resumed.advance(12, false);
+                const check = compare(snapshot(resumed), snapshot(serial));
+                if (check.mismatches) throw new Error(`checkpoint resume differed: ${JSON.stringify(check.first)}`);
+            } finally { serial.free(); resumed.free(); }
+        }
+        return { ...compare(steps, serialSteps), native: compare(steps, reference), serialNative: compare(serialSteps, reference) };
+    } finally { sim.free(); baseline.free(); }
 }
 const yieldChannel = new MessageChannel();
 const yields = [];
@@ -143,8 +139,8 @@ self.onmessage = async ({ data: options }) => {
             const single = await import(`${packageBase}/single/altd_sim.js`);
             await single.default();
             report.parity = await parity(lib, single, scene, network, model, scenario, JSON.parse(await text('/target/wasm-thread-reference.json')));
-            report.nativeExact = Object.values(report.parity).every((result) => result.native.mismatches === 0);
-            report.ok &&= Object.values(report.parity).every((result) => result.mismatches === 0 && result.native.mismatches === result.serialNative.mismatches);
+            report.nativeExact = report.parity.native.mismatches === 0;
+            report.ok &&= report.parity.mismatches === 0 && report.parity.native.mismatches === report.parity.serialNative.mismatches;
             if (options.strictNative) report.ok &&= report.nativeExact;
             if (options.gpuMode === 'hardware') {
                 const cpu = new lib.Simulation(scene, network, model, scenario.options);

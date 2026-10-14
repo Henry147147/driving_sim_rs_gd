@@ -1,5 +1,5 @@
 // `Car::step` (src/physics/car.rs) with its wall collision (src/physics/collision.rs) for
-// tracks with physics shapes and no native shared broadphase: one thread per
+// tracks with physics shapes and no native broadphase: one thread per
 // car. Every f64 expression of the CPU code whose operands are float32 values
 // and whose result is rounded to float32 at once (f32r, dot_f32, ...) is a
 // plain float operation here: +, -, *, / and sqrt rounded through double
@@ -190,7 +190,7 @@ __device__ inline bool shape_overlaps(const ShapeDev& s, double left, double rig
     return !(s.max_x < left || s.min_x > right || s.max_y < top || s.min_y > bottom);
 }
 
-// Broad pairs update (pair_check_pending, no shared broadphase): retain the
+// Broad pairs update (pair_check_pending, no native broadphase): retain the
 // overlapping pairs with their separating axes, then append overlapping
 // shapes in ascending index order.
 __device__ inline void update_pairs(const World& w, Car& car, double left, double right, double top, double bottom) {

@@ -28,14 +28,6 @@ enum ControlSlot {
     Boost,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mode {
-    /// Each car runs the whole window on its own (fast path).
-    Independent,
-    /// All cars advance one tick at a time, as `TrainingRunner.step`.
-    Lockstep,
-}
-
 /// A window advanced tick by tick with the ray sensors served by an external
 /// raycaster (the WebGPU raycaster of the WebAssembly library). After
 /// `TrainingRunner::begin_ray_window`, each tick is `prepare_ray_tick`,
@@ -108,9 +100,7 @@ pub struct TrainingRunner {
     pub generation: u64,
     pub tick: u64,
     pub batch_index: usize,
-    pub mode: Mode,
     user_paused: bool,
-    physics: Option<crate::physics::simulation::SharedPhysics>,
 }
 
 impl TrainingRunner {
@@ -160,9 +150,7 @@ impl TrainingRunner {
             generation: 0,
             tick: 0,
             batch_index: 0,
-            mode: Mode::Independent,
             user_paused: false,
-            physics: None,
         }
     }
 
@@ -297,11 +285,6 @@ impl TrainingRunner {
         let world = &*self.world;
         let math = world.math;
         let (position, rotation) = (self.position, self.rotation);
-        let retained = if reused {
-            self.agents.len().min(networks.len())
-        } else {
-            0
-        };
         // VehicleManager keeps a FIFO of physical vehicles, independently of
         // network selection. Native contact and broad-phase caches survive.
         let mut old = std::mem::take(&mut self.agents).into_iter();
@@ -349,29 +332,12 @@ impl TrainingRunner {
             })
             .collect();
         profile.mark("agents_and_novelty");
-        if world.track.native_broadphase && self.physics.is_none() {
-            self.physics = Some(crate::physics::simulation::SharedPhysics::new(
-                world,
-                &mut self.agents.iter_mut().map(|a| &mut a.car).collect::<Vec<_>>(),
-            ));
-        } else if let Some(physics) = self.physics.as_mut() {
-            physics.resize(
-                world,
-                &mut self.agents.iter_mut().map(|a| &mut a.car).collect::<Vec<_>>(),
-                retained,
-            );
-        }
         self.settle_reset();
         profile.mark("passive_reset");
     }
 
     /// Reset an evaluation without replacing networks or advancing evolution.
-    /// Random training uses independent cars; native shared redraw replay is separate.
     pub fn reset_evaluation(&mut self) {
-        assert!(
-            !self.world.track.native_broadphase,
-            "track batches require independent cars"
-        );
         let (position, rotation) = (self.position, self.rotation);
         self.agents.par_iter_mut().for_each(|agent| {
             let novelty = agent.stats.network_novelty;
@@ -388,14 +354,7 @@ impl TrainingRunner {
 
     fn settle_reset(&mut self) {
         let world = &*self.world;
-        Self::advance_physics(
-            world,
-            &mut self.agents,
-            &mut self.physics,
-            self.eliminate_on_wall,
-            false,
-            0,
-        );
+        Self::advance_physics(world, &mut self.agents, self.eliminate_on_wall, false, 0);
         // Reset above represents the first _IntegrateForces callback applying
         // the pending spawn request. StartNextGeneration runs on the sixth
         // eligible stable callback, before that callback's drive update.
@@ -410,63 +369,31 @@ impl TrainingRunner {
             if stable_callbacks == 6 {
                 break;
             }
-            Self::advance_physics(
-                world,
-                &mut self.agents,
-                &mut self.physics,
-                self.eliminate_on_wall,
-                false,
-                0,
-            );
+            Self::advance_physics(world, &mut self.agents, self.eliminate_on_wall, false, 0);
         }
         self.tick = 0;
         self.batch_index = 0;
     }
 
-    fn advance_physics(
-        world: &World,
-        agents: &mut [TrainingAgent],
-        physics: &mut Option<crate::physics::simulation::SharedPhysics>,
-        eliminate: bool,
-        drive: bool,
-        tick: u64,
-    ) {
-        if let Some(physics) = physics {
-            let controls: Vec<_> = agents.iter().map(|a| a.controls).collect();
-            let was_active: Vec<_> = agents.iter().map(|a| a.car.active).collect();
-            let contacts = physics.advance(
-                world,
-                &mut agents.iter_mut().map(|a| &mut a.car).collect::<Vec<_>>(),
-                &controls,
-                eliminate,
-                drive,
-            );
-            for ((agent, contact), was_active) in agents.iter_mut().zip(contacts).zip(was_active) {
-                agent.pending_contact |= contact;
-                if was_active && !agent.car.active {
-                    agent.deactivated_at = Some(tick);
-                }
+    fn advance_physics(world: &World, agents: &mut [TrainingAgent], eliminate: bool, drive: bool, tick: u64) {
+        agents.par_iter_mut().for_each(|a| {
+            let was_active = a.car.active;
+            a.pending_contact |= if drive {
+                a.car.step(world, &a.controls, DT, eliminate)
+            } else {
+                a.car.passive_step(world, DT, eliminate)
+            };
+            if was_active && !a.car.active {
+                a.deactivated_at = Some(tick);
             }
-        } else {
-            agents.par_iter_mut().for_each(|a| {
-                let was_active = a.car.active;
-                a.pending_contact |= if drive {
-                    a.car.step(world, &a.controls, DT, eliminate)
-                } else {
-                    a.car.passive_step(world, DT, eliminate)
-                };
-                if was_active && !a.car.active {
-                    a.deactivated_at = Some(tick);
-                }
-            });
-        }
+        });
     }
 
     pub fn results(&self) -> Vec<AgentResult<'_>> {
         self.agents.iter().map(TrainingAgent::result).collect()
     }
 
-    /// The original reproduction -> random track -> TileMap redraw -> car reset order.
+    /// The original reproduction -> random track -> track replacement -> car reset order.
     /// On success, `config` becomes the returned track's configuration, including
     /// a pinned start and any fallback shortening, for the following generation.
     pub fn next_generation_random_track(
@@ -513,13 +440,8 @@ impl TrainingRunner {
 
     /// Select a prepared track before starting or installing a generation.
     pub fn replace_track(&mut self, world: Arc<World>, position: V2, rotation: f64) {
-        if let Some(physics) = self.physics.as_mut() {
-            physics.queue_tilemap_redraw(self.world.clone());
-        }
-        if self.physics.is_none() {
-            for agent in &mut self.agents {
-                agent.car.clear_track_contacts();
-            }
+        for agent in &mut self.agents {
+            agent.car.clear_track_contacts();
         }
         self.world = world;
         self.position = position;

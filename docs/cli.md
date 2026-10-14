@@ -1,6 +1,6 @@
 # CLI reference
 
-Run commands from the repository root or an unpacked release archive; both contain `assets/`. `altd-sim --version` identifies the build, including nightly packages. `--threads N` sets the Rayon pool; the default respects CPU affinity. `--mode independent|lockstep` selects native scheduling. Both are global flags. Each command's `--help` is the complete argument reference.
+Run commands from the repository root or an unpacked release archive; both contain `assets/`. `altd-sim --version` identifies the build, including nightly packages. `--threads N` sets the Rayon pool; the default respects CPU affinity. It is a global flag. Each command's `--help` is the complete argument reference.
 
 `--math-profile proton|win10-fma3|win11-fma3` is also global and selects the game's C runtime arithmetic independently of the CPU or GPU backend. Every build includes all three profiles. Omitted profiles use `proton` on Linux/macOS, `win10-fma3` on Windows before build 26100, and `win11-fma3` on Windows build 26100 and newer. For example, `altd-sim --math-profile win11-fma3 train-scratch ...` trains for current Windows on any supported host. [Math profiles](../math/README.md) describes the version boundaries and implementation.
 

@@ -305,46 +305,44 @@ fn assert_same_agents(a: &TrainingRunner, b: &TrainingRunner) {
     assert!(sa.iter().zip(&sb).all(|(p, q)| p.to_bits() == q.to_bits()));
 }
 
-/// The externally served ray window reproduces `advance` in both modes,
-/// including partial windows, elimination stops and the time limit.
+/// The externally served ray window, a tick-major loop, reproduces the
+/// car-major `advance`, including partial windows, elimination stops and the
+/// time limit.
 #[test]
 fn ray_window_matches_advance() {
     let seed = Network::xavier(&[20, 16, 5], &mut PyRandom::new(9));
-    for mode in [Mode::Independent, Mode::Lockstep] {
-        let mut a = generated_runner(24);
-        a.mode = mode;
-        a.start(&seed);
-        let mut b = generated_runner(24);
-        b.start(&seed);
-        assert_eq!(
-            a.advance(75, false),
-            advance_with_cpu_ray_window(&mut b, 75, false, None)
-        );
-        assert_same_agents(&a, &b);
-        assert_eq!(a.advance(0, false), advance_with_cpu_ray_window(&mut b, 0, false, None));
-        assert_same_agents(&a, &b);
-        // Two windows of a short generation: the time limit stops both before driving.
-        let (ticks, limit) = a.generation_window(600);
-        assert_eq!(
-            a.advance_window(ticks, true, Some(limit)),
-            advance_with_cpu_ray_window(&mut b, ticks, true, Some(limit))
-        );
-        assert_same_agents(&a, &b);
-        // Stops at the limit, or earlier once every car is eliminated.
-        assert!(
-            a.tick <= ticks + 75 && (a.tick > 500 || a.agents.iter().all(|x| !x.car.active)),
-            "tick {}",
-            a.tick
-        );
-        a.next_generation();
-        b.next_generation();
-        assert_same_agents(&a, &b);
-        assert_eq!(
-            a.advance_generation(180),
-            advance_with_cpu_ray_window(&mut b, 200, true, Some(3.0))
-        );
-        assert_same_agents(&a, &b);
-    }
+    let mut a = generated_runner(24);
+    a.start(&seed);
+    let mut b = generated_runner(24);
+    b.start(&seed);
+    assert_eq!(
+        a.advance(75, false),
+        advance_with_cpu_ray_window(&mut b, 75, false, None)
+    );
+    assert_same_agents(&a, &b);
+    assert_eq!(a.advance(0, false), advance_with_cpu_ray_window(&mut b, 0, false, None));
+    assert_same_agents(&a, &b);
+    // Two windows of a short generation: the time limit stops both before driving.
+    let (ticks, limit) = a.generation_window(600);
+    assert_eq!(
+        a.advance_window(ticks, true, Some(limit)),
+        advance_with_cpu_ray_window(&mut b, ticks, true, Some(limit))
+    );
+    assert_same_agents(&a, &b);
+    // Stops at the limit, or earlier once every car is eliminated.
+    assert!(
+        a.tick <= ticks + 75 && (a.tick > 500 || a.agents.iter().all(|x| !x.car.active)),
+        "tick {}",
+        a.tick
+    );
+    a.next_generation();
+    b.next_generation();
+    assert_same_agents(&a, &b);
+    assert_eq!(
+        a.advance_generation(180),
+        advance_with_cpu_ray_window(&mut b, 200, true, Some(3.0))
+    );
+    assert_same_agents(&a, &b);
     // Every car eliminated on walls or idle: the inactive stop ends the window.
     let mut a = generated_runner(8);
     a.start(&seed);

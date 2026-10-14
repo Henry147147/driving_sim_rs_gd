@@ -16,7 +16,7 @@ use altd_sim::track::world::{vector, World};
 use altd_sim::training::batch_evaluation::BatchEvaluation;
 use altd_sim::training::evolution::EvolutionSettings;
 use altd_sim::training::pyrandom::PyRandom;
-use altd_sim::training::{Mode, SensorLayout, TrainingRandom, TrainingRunner};
+use altd_sim::training::{SensorLayout, TrainingRandom, TrainingRunner};
 use serde_json::{json, Value};
 use std::io::Write;
 use std::path::Path;
@@ -53,7 +53,7 @@ pub(super) fn final_candidate_leader(fitness: &[f64]) -> usize {
     (0..fitness.len()).fold(0, |best, i| if fitness[i] > fitness[best] { i } else { best })
 }
 
-pub(crate) fn train_scratch(config: &ScratchConfig, mode: Mode, threads: usize) {
+pub(crate) fn train_scratch(config: &ScratchConfig, threads: usize) {
     let scene = load(&config.scene);
     let network_data = load_or(config.network.as_deref(), &RALLY_NETWORK);
     let model = load_or(config.model.as_deref(), &RALLY_MODEL);
@@ -258,7 +258,6 @@ pub(crate) fn train_scratch(config: &ScratchConfig, mode: Mode, threads: usize) 
         eliminate_on_wall,
         idle_eliminate,
     );
-    runner.mode = mode;
     let gpu = config
         .gpu
         .then(|| altd_sim::gpu::hip::Gpu::open(None).unwrap_or_else(|e| panic!("--gpu: {e}")));

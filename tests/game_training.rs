@@ -139,25 +139,19 @@ fn tiny_runner() -> altd_sim::training::TrainingRunner {
 
 #[test]
 fn idle_elimination_stops_scoring_but_retains_passive_cars() {
-    for mode in [
-        altd_sim::training::Mode::Independent,
-        altd_sim::training::Mode::Lockstep,
-    ] {
-        let mut runner = tiny_runner();
-        runner.mode = mode;
-        runner.eliminate_when_idle = true;
-        runner.advance(480, false);
-        assert!(runner.agents[0].car.active);
-        assert_eq!(runner.agents[0].stats.idle_ticks, 80);
-        runner.advance(6, false);
-        assert!(!runner.agents[0].car.active);
-        let stats = format!("{:?}", runner.agents[0].stats);
-        let physical_tick = runner.agents[0].car.tick;
-        runner.advance(120, false);
-        assert_eq!(runner.agents.len(), 1);
-        assert_eq!(runner.agents[0].car.tick, physical_tick + 120);
-        assert_eq!(format!("{:?}", runner.agents[0].stats), stats);
-    }
+    let mut runner = tiny_runner();
+    runner.eliminate_when_idle = true;
+    runner.advance(480, false);
+    assert!(runner.agents[0].car.active);
+    assert_eq!(runner.agents[0].stats.idle_ticks, 80);
+    runner.advance(6, false);
+    assert!(!runner.agents[0].car.active);
+    let stats = format!("{:?}", runner.agents[0].stats);
+    let physical_tick = runner.agents[0].car.tick;
+    runner.advance(120, false);
+    assert_eq!(runner.agents.len(), 1);
+    assert_eq!(runner.agents[0].car.tick, physical_tick + 120);
+    assert_eq!(format!("{:?}", runner.agents[0].stats), stats);
 }
 #[test]
 fn generation_stop_matches_original_scheduler_callbacks() {
@@ -494,190 +488,86 @@ fn paused_runner_matches_original_native_freeze_and_restore() {
         physics::car::Sensor,
         track::world::World,
         training::evolution::EvolutionSettings,
-        training::{Mode, SensorLayout, TrainingRunner},
+        training::{SensorLayout, TrainingRunner},
     };
     let fixture: Value = serde_json::from_str(include_str!("fixtures/native_user_pause32.json")).unwrap();
     let states = fixture["states"].as_array().unwrap();
     let bits = |x: f64| (x as f32).to_bits();
-    for mode in [Mode::Independent, Mode::Lockstep] {
-        let world = std::sync::Arc::new(World::from_scene(&fixture["scene"]));
-        let mut runner = TrainingRunner::new(
-            world,
-            V2::new(3840.0, 1664.0),
-            std::f32::consts::FRAC_PI_2 as f64,
-            SensorLayout {
-                names: vec!["Boost".into()],
-                sensors: vec![Sensor::BoostCapacity],
-            },
-            &["Acceleration", "Steering", "Brake", "Handbrake", "Boost"].map(str::to_owned),
-            EvolutionSettings {
-                population: 1,
-                ..Default::default()
-            },
-            GameRandom::new([1, 2, 3, 4], 0),
-            1,
-            0,
-            false,
-            false,
-        );
-        let params = fixture["network"]["parameters"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_f64().unwrap())
-            .collect();
-        runner.resume(&[Network::from_vector(&[1, 5], params)], 0);
-        runner.mode = mode;
-        // This capture starts immediately after Reset, before the next native basis
-        // reconstruction. Runner installation includes the waiting callbacks, so
-        // restore the captured transform before testing the pause scheduler.
-        runner.agents[0].car.set_body_basis(
-            altd_sim::track::curve::json_vector(&states[0]["body_basis"][0]),
-            altd_sim::track::curve::json_vector(&states[0]["body_basis"][1]),
-        );
-        for tick in 0..states.len() - 1 {
-            for event in fixture["events"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter(|e| e["tick"].as_u64() == Some(tick as u64))
-            {
-                assert_eq!(event["kind"], "freeze");
-                runner.set_paused(event["value"].as_bool().unwrap());
-            }
-            runner.step();
-            let car = &runner.agents[0].car;
-            let want = &states[tick + 1];
-            for (key, v) in [
-                ("position", car.position),
-                ("velocity", car.velocity),
-                ("acceleration", car.acceleration),
-            ] {
-                assert_eq!(
-                    [bits(v.x), bits(v.y)],
-                    [
-                        bits(want[key][0].as_f64().unwrap()),
-                        bits(want[key][1].as_f64().unwrap())
-                    ],
-                    "{key} tick {tick}"
-                );
-            }
-            assert_eq!(
-                bits(car.angular_velocity),
-                bits(want["angular_velocity"].as_f64().unwrap()),
-                "angular tick {tick}"
-            );
-            assert_eq!(
-                bits(car.boost_energy),
-                bits(want["boost_energy"].as_f64().unwrap()),
-                "boost tick {tick}"
-            );
-            assert_eq!(car.frozen, want["frozen"].as_bool().unwrap());
-        }
-    }
-}
-
-/// Independent mode runs each car through a window alone; Lockstep runs the
-/// original tick-major loop. Both must stop at the same tick with identical
-/// cars, including when cars go inactive at different ticks.
-#[test]
-fn car_major_windows_match_tick_major_scheduler() {
-    use altd_sim::{
-        nn::network::Network,
-        track::world::World,
-        training::evolution::EvolutionSettings,
-        training::{Mode, SensorLayout, TrainingRunner},
-    };
-    let scene = generated::scene("rally", 0);
-    let model = generated::model("rally");
-    let network = generated::network_export("rally");
-    let spawn = generated::spawn(&scene);
-    let outputs: Vec<String> = network["outputs"]
+    let world = std::sync::Arc::new(World::from_scene(&fixture["scene"]));
+    let mut runner = TrainingRunner::new(
+        world,
+        V2::new(3840.0, 1664.0),
+        std::f32::consts::FRAC_PI_2 as f64,
+        SensorLayout {
+            names: vec!["Boost".into()],
+            sensors: vec![Sensor::BoostCapacity],
+        },
+        &["Acceleration", "Steering", "Brake", "Handbrake", "Boost"].map(str::to_owned),
+        EvolutionSettings {
+            population: 1,
+            ..Default::default()
+        },
+        GameRandom::new([1, 2, 3, 4], 0),
+        1,
+        0,
+        false,
+        false,
+    );
+    let params = fixture["network"]["parameters"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|v| v.as_str().unwrap().to_owned())
+        .map(|v| v.as_f64().unwrap())
         .collect();
-    let world = std::sync::Arc::new(World::from_scene(&scene));
-    let run = |mode: Mode, eliminate: bool, window: &dyn Fn(&mut TrainingRunner) -> u64| {
-        let settings = EvolutionSettings {
-            population: 48,
-            selection_size: 1,
-            preserve_parents_size: 1,
-            mutation_rate: 0.5,
-            weight_decay: 0.0,
-            ..Default::default()
-        };
-        let mut runner = TrainingRunner::new(
-            world.clone(),
-            altd_sim::track::world::vector(&spawn["position"]),
-            spawn["rotation"].as_f64().unwrap(),
-            SensorLayout::from_exports(&network, &model, altd_sim::math::profile::MathProfile::Proton),
-            &outputs,
-            settings,
-            GameRandom::new([1, 2, 3, 4], 3),
-            2,
-            0,
-            eliminate,
-            eliminate,
-        );
-        runner.mode = mode;
-        runner.start(&Network::from_game_export(&network));
-        let executed = window(&mut runner);
-        let cars: Vec<String> = runner
-            .agents
+    runner.resume(&[Network::from_vector(&[1, 5], params)], 0);
+    // This capture starts immediately after Reset, before the next native basis
+    // reconstruction. Runner installation includes the waiting callbacks, so
+    // restore the captured transform before testing the pause scheduler.
+    runner.agents[0].car.set_body_basis(
+        altd_sim::track::curve::json_vector(&states[0]["body_basis"][0]),
+        altd_sim::track::curve::json_vector(&states[0]["body_basis"][1]),
+    );
+    for tick in 0..states.len() - 1 {
+        for event in fixture["events"]
+            .as_array()
+            .unwrap()
             .iter()
-            .map(|a| {
-                let c = &a.car;
-                format!(
-                    "{:?} {:?} {:?} {} {} {} {} {} {:?} {:?} {:?}",
-                    [
-                        c.position.x.to_bits(),
-                        c.position.y.to_bits(),
-                        c.velocity.x.to_bits(),
-                        c.velocity.y.to_bits()
-                    ],
-                    [
-                        c.angular_velocity.to_bits(),
-                        c.rotation.to_bits(),
-                        c.boost_energy.to_bits()
-                    ],
-                    [c.acceleration.x.to_bits(), c.acceleration.y.to_bits()],
-                    c.active,
-                    c.frozen,
-                    c.tick,
-                    c.collision_count,
-                    a.pending_contact,
-                    a.deactivated_at,
-                    a.stats,
-                    a.result().metrics
-                )
-            })
-            .collect();
-        (executed, runner.tick, runner.batch_index, cars)
-    };
-    type Window<'a> = (&'a str, bool, &'a dyn Fn(&mut TrainingRunner) -> u64);
-    let windows: [Window<'_>; 4] = [
-        ("all inactive", true, &|r| r.advance_generation(5400)),
-        ("time limit", false, &|r| r.advance_generation(301)),
-        ("some inactive", true, &|r| r.advance(250, true)),
-        ("fixed window", true, &|r| r.advance(250, false)),
-    ];
-    for (name, eliminate, window) in windows {
-        let (car_major, tick_major) = (
-            run(Mode::Independent, eliminate, window),
-            run(Mode::Lockstep, eliminate, window),
-        );
-        assert_eq!(car_major.0, tick_major.0, "{name}: executed");
-        assert_eq!(car_major.1, tick_major.1, "{name}: tick");
-        assert_eq!(car_major.2, tick_major.2, "{name}: batch index");
-        for (i, (a, b)) in car_major.3.iter().zip(&tick_major.3).enumerate() {
-            assert_eq!(a, b, "{name}: car {i}");
+            .filter(|e| e["tick"].as_u64() == Some(tick as u64))
+        {
+            assert_eq!(event["kind"], "freeze");
+            runner.set_paused(event["value"].as_bool().unwrap());
         }
-        let inactive = car_major.3.iter().filter(|c| c.contains(" false false ")).count();
-        eprintln!("{name}: {} ticks, {inactive}/48 inactive", car_major.0);
+        runner.step();
+        let car = &runner.agents[0].car;
+        let want = &states[tick + 1];
+        for (key, v) in [
+            ("position", car.position),
+            ("velocity", car.velocity),
+            ("acceleration", car.acceleration),
+        ] {
+            assert_eq!(
+                [bits(v.x), bits(v.y)],
+                [
+                    bits(want[key][0].as_f64().unwrap()),
+                    bits(want[key][1].as_f64().unwrap())
+                ],
+                "{key} tick {tick}"
+            );
+        }
+        assert_eq!(
+            bits(car.angular_velocity),
+            bits(want["angular_velocity"].as_f64().unwrap()),
+            "angular tick {tick}"
+        );
+        assert_eq!(
+            bits(car.boost_energy),
+            bits(want["boost_energy"].as_f64().unwrap()),
+            "boost tick {tick}"
+        );
+        assert_eq!(car.frozen, want["frozen"].as_bool().unwrap());
     }
 }
+
 #[test]
 fn vision_lengths_match_the_game_editor_for_every_whole_angle() {
     use altd_sim::{

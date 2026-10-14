@@ -23,9 +23,9 @@ The GPU validation example uses private modules in `examples/gpu_check/` for mat
 
 CPU runners own populations and checkpoint serialization. HIP retains uploaded networks and geometry between windows; CPU evolution installs offspring and preserves the CPU/GPU resume format. WebGPU full simulation mirrors state in browser buffers and commits complete windows back to the Session. A failed window leaves the last committed state available for CPU continuation.
 
-## Execution modes
+## Execution
 
-Independent mode advances each car through a window, keeping its state and network near the CPU. Lockstep advances the population one tick at a time. Scenes requesting native shared broadphase require tick-major execution to preserve population contact ordering. Generated CLI training disables that shared broadphase so CPU and GPU use independent car physics.
+The CPU advances each car through a whole window on its own, keeping its state and network near the CPU; cars that stop early catch up to the window's final tick. Cars never collide with each other, so their physics is independent. Scenes requesting the native broadphase order each car's wall pairs like a fresh native tree holding the walls and that car. The GPU backends do not model that order, so generated CLI training disables it.
 
 Statistics run before driving. Inference uses eight original index-based batches, so compacting inactive work must preserve each car's batch identity. Eliminated cars stop driving and scoring, but passive physics and pending contact accounting continue. The generation limit is checked on the statistics callback, so actual callback counts can slightly exceed a requested tick cap.
 
