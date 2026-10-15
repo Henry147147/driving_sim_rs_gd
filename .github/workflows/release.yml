@@ -118,7 +118,10 @@ jobs:
           if-no-files-found: error
 
   gpu-windows-amd:
-    runs-on: windows-latest
+    # The HIP SDK 7.1 clang headers clash with the MSVC 14.5x <cmath> of Visual
+    # Studio 2026 (windows-latest): its isgreater and friends are already
+    # __host__ __device__. Visual Studio 2022 builds.
+    runs-on: windows-2022
     timeout-minutes: 60
     env:
       RUSTFLAGS: -C target-cpu=x86-64
