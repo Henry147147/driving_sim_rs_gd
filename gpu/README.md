@@ -4,7 +4,7 @@ The GPU library runs whole driving generations on an AMD GPU (HIP) or an NVIDIA 
 
 ## Build and use
 
-Linux release archives include `libaltd_gpu.so` beside `altd-sim`, built with ROCm 7.1 for the targets in `release-targets`. They need a ROCm 7.x runtime that provides `libamdhip64.so.7`, but no compiler. `altd-sim gpu-info` reports the loaded library. To build the library yourself, install ROCm with `hipcc`, then build from the repository root:
+The `amd` release archives include the library beside `altd-sim`, built for the targets in `release-targets`: `libaltd_gpu.so` with ROCm 7.1 on Linux, `altd_gpu.dll` with the HIP SDK 7.1 on Windows. They need a ROCm 7.x runtime that provides `libamdhip64.so.7` (Linux), or an AMD driver or HIP SDK 7.1 that provides `amdhip64_7.dll` (Windows), but no compiler. `altd-sim gpu-info` reports the loaded library. To build the library yourself, install ROCm with `hipcc` (or the HIP SDK on Windows, then use `gpu/build.ps1`), and build from the repository root:
 
 ```sh
 gpu/build.sh
@@ -45,6 +45,8 @@ The same sources build for NVIDIA GPUs with `nvcc`; `sim/compat.h` maps the HIP 
 gpu/build-cuda.sh                  # Linux, writes target/gpu/libaltd_gpu.so
 gpu/build-cuda.ps1                 # Windows, writes target/gpu/altd_gpu.dll
 ```
+
+The `nvidia` release archives include a library built with CUDA 13.4 for `sm_75,sm_86,sm_89,sm_120` plus `sm_120` PTX: RTX 20 to RTX 50 GPUs, and later GPUs through the PTX. Other targets, such as `sm_80` (A100) and `sm_90` (H100), need their own build. It links the CUDA runtime statically, so it needs only an NVIDIA driver that supports CUDA 13 (580 or newer).
 
 `OUT` overrides the output directory. `CUDA_ARCH` defaults to `native`, which builds for the GPUs of the build machine. Without a GPU, nvcc 13.4 warns and builds `sm_75` code and PTX instead, which newer GPUs compile at load time. To build for other GPUs, or several, list `sm_` targets separated by commas or spaces; `nvidia-smi --query-gpu=compute_cap --format=csv` reports the number, so 8.6 is `sm_86`. A list also embeds PTX for its newest target, which the driver compiles at load time for a newer GPU. CUDA 13 builds for Turing (`sm_75`, RTX 20 series) and newer only; older GPUs need a CUDA 12 toolkit, which is untested. Both scripts check the double tables with `gpu/gen_tables.py --check` (`python3` on Linux, the `py` launcher or `python` on Windows). The binary loads `ALTD_GPU_LIB`, then the library beside the executable, then `target/gpu`, as on AMD. `altd-sim gpu-info` runs one kernel when a GPU is present, so a library built for another GPU fails there with HIP error 209.
 

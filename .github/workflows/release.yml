@@ -30,6 +30,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  # Turing, Ampere, Ada and Blackwell consumer GPUs, as in ci.yml; newer GPUs JIT the sm_120 PTX.
+  CUDA_ARCH: sm_75,sm_86,sm_89,sm_120
 
 jobs:
   version:
@@ -75,7 +77,9 @@ jobs:
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
           echo "Building $version (publish: $publish)" >> "$GITHUB_STEP_SUMMARY"
 
-  gpu-library:
+  # Each GPU library job uploads gpu-<system>-<vendor>, which the package job
+  # puts beside the binary in the matching altd-sim-*-<vendor> archive.
+  gpu-linux-amd:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container: rocm/dev-ubuntu-24.04:7.1.1
@@ -91,13 +95,114 @@ jobs:
           sort gpu/release-targets | diff -u - embedded
       - uses: actions/upload-artifact@v4
         with:
-          name: gpu-library
+          name: gpu-linux-amd
           path: dist/libaltd_gpu.so
+          if-no-files-found: error
+
+  gpu-linux-nvidia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Keep the CUDA version in step with ci.yml. Ubuntu 22.04 matches the
+    # package job, so the library needs no newer glibc than the binary.
+    container: nvidia/cuda:13.4.2-devel-ubuntu22.04
+    steps:
+      - name: Install the tools the CUDA image lacks
+        run: apt-get update && apt-get install -y --no-install-recommends python3
+      - uses: actions/checkout@v4
+      - name: Build for every consumer GPU target
+        run: OUT=dist gpu/build-cuda.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpu-linux-nvidia
+          path: dist/libaltd_gpu.so
+          if-no-files-found: error
+
+  gpu-windows-amd:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      RUSTFLAGS: -C target-cpu=x86-64
+      HIP_SDK: C:\hip-sdk
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - name: Install the HIP SDK
+        # HIP SDK for Windows 7.1.1, in step with the ROCm 7.1.1 Linux builds. The
+        # bundle also installs a driver, so only its SDK core package is installed.
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "hip-sdk.exe"
+          curl.exe -fsSL -o $installer https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-26.Q1-Win11-For-HIP.exe
+          if ($LASTEXITCODE -ne 0) { throw "cannot download the HIP SDK" }
+          $unpacked = Join-Path $env:RUNNER_TEMP "hip-sdk"
+          7z x $installer "-o$unpacked" | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "cannot unpack the HIP SDK" }
+          $msi = Get-ChildItem $unpacked -Recurse -Filter ROCm_SDK_Core.msi | Select-Object -First 1
+          if (-not $msi) { throw "the HIP SDK bundle has no ROCm_SDK_Core.msi" }
+          $log = Join-Path $env:RUNNER_TEMP "hip-sdk.log"
+          $install = Start-Process msiexec -Wait -PassThru -ArgumentList "/i", "`"$($msi.FullName)`"", "INSTALLDIR=$env:HIP_SDK", "/qn", "/norestart", "/l*v", "`"$log`""
+          if ($install.ExitCode -ne 0) { Get-Content $log -Tail 50; throw "HIP SDK install failed with $($install.ExitCode)" }
+          $hipcc = Get-ChildItem $env:HIP_SDK -Recurse -Filter hipcc.exe | Select-Object -First 1
+          if (-not $hipcc) { throw "no hipcc.exe under $env:HIP_SDK" }
+          & $hipcc.FullName --version
+          "HIP_PATH=$(Split-Path $hipcc.DirectoryName)" >> $env:GITHUB_ENV
+          # gpu-info below loads the HIP runtime (amdhip64_7.dll) from here.
+          $hipcc.DirectoryName >> $env:GITHUB_PATH
+      - name: Build for every consumer GPU target
+        run: ./gpu/build.ps1 -Out dist -Arch (Get-Content gpu/release-targets -Raw)
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: gpu-windows-x86-64
+      - name: Check the library against the Rust layouts
+        # No GPU is needed: gpu-info checks the device struct layouts and the exports on the host.
+        run: cargo run --locked --bin altd-sim -- gpu-info --library dist/altd_gpu.dll
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpu-windows-amd
+          path: dist/altd_gpu.dll
+          if-no-files-found: error
+
+  gpu-windows-nvidia:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CUDA_VERSION: 13.4.2
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - name: Install the CUDA compiler
+        # Only the redistributable parts nvcc needs, not the whole toolkit installer.
+        run: |
+          $base = "https://developer.download.nvidia.com/compute/cuda/redist"
+          $manifest = Invoke-RestMethod "$base/redistrib_$env:CUDA_VERSION.json"
+          $parts = Join-Path $env:RUNNER_TEMP "cuda-parts"
+          $cuda = Join-Path $env:RUNNER_TEMP "cuda"
+          foreach ($name in "cuda_nvcc", "cuda_crt", "cuda_cudart", "libnvvm", "cccl") {
+            $zip = Join-Path $env:RUNNER_TEMP "$name.zip"
+            curl.exe -fsSL -o $zip "$base/$($manifest.$name.'windows-x86_64'.relative_path)"
+            if ($LASTEXITCODE -ne 0) { throw "cannot download $name" }
+            7z x $zip "-o$parts" | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "cannot unpack $name" }
+          }
+          # Each archive unpacks into its own directory; merge them into one toolkit.
+          foreach ($dir in Get-ChildItem $parts -Directory) {
+            robocopy $dir.FullName $cuda /E /NFL /NDL /NJH /NJS /NP | Out-Null
+            if ($LASTEXITCODE -ge 8) { throw "cannot merge $($dir.Name)" }
+          }
+          "CUDA_PATH=$cuda" >> $env:GITHUB_ENV
+          "$cuda\bin" >> $env:GITHUB_PATH
+          & "$cuda\bin\nvcc.exe" --version
+      - name: Build for every consumer GPU target
+        run: ./gpu/build-cuda.ps1 -Out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpu-windows-nvidia
+          path: dist/altd_gpu.dll
           if-no-files-found: error
 
   package:
     name: package (${{ matrix.target }})
-    needs: [version, gpu-library]
+    needs: [version, gpu-linux-amd, gpu-linux-nvidia, gpu-windows-amd, gpu-windows-nvidia]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -108,18 +213,29 @@ jobs:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             rustflags: -C target-cpu=x86-64
-            gpu: true
+            system: linux
+            library: libaltd_gpu.so
+            variants: cpu amd nvidia
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             rustflags: -C target-cpu=x86-64
             exe: .exe
+            system: windows
+            library: altd_gpu.dll
+            variants: cpu amd nvidia
           - os: macos-latest
             target: aarch64-apple-darwin
+            system: macos
+            variants: cpu
     env:
       # Overrides target-cpu=native from .cargo/config.toml on x86 hosts.
       RUSTFLAGS: ${{ matrix.rustflags }}
       ALTD_BUILD_VERSION: ${{ needs.version.outputs.version }}
+      # Each variant becomes the archive $PACKAGE-<variant>: cpu has no GPU
+      # library, amd and nvidia carry that vendor's library beside the binary.
       PACKAGE: altd-sim-${{ needs.version.outputs.label }}-${{ matrix.target }}
+      VARIANTS: ${{ matrix.variants }}
+      LIBRARY: ${{ matrix.library }}
     defaults:
       run:
         shell: bash
@@ -134,48 +250,72 @@ jobs:
         with:
           key: release-${{ matrix.target }}
       - run: cargo build --locked --release --bin altd-sim --target ${{ matrix.target }}
-      - name: Assemble the package
-        run: |
-          mkdir -p "dist/$PACKAGE"
-          cp "target/${{ matrix.target }}/release/altd-sim${{ matrix.exe }}" README.md LICENSE GODOT_LICENSE "dist/$PACKAGE/"
-          cp -R assets docs "dist/$PACKAGE/"
-          mkdir -p "dist/$PACKAGE/math"
-          cp math/README.md "dist/$PACKAGE/math/"
-      - if: matrix.gpu
+      - if: matrix.library
         uses: actions/download-artifact@v4
         with:
-          name: gpu-library
-          path: dist/${{ env.PACKAGE }}
+          pattern: gpu-${{ matrix.system }}-*
+          path: gpu-libraries
+      - name: Assemble the packages
+        run: |
+          for variant in $VARIANTS; do
+            name="$PACKAGE-$variant"
+            mkdir -p "dist/$name/math"
+            cp "target/${{ matrix.target }}/release/altd-sim${{ matrix.exe }}" README.md LICENSE GODOT_LICENSE "dist/$name/"
+            cp -R assets docs "dist/$name/"
+            cp math/README.md "dist/$name/math/"
+            if [ "$variant" != cpu ]; then
+              cp "gpu-libraries/gpu-${{ matrix.system }}-$variant/$LIBRARY" "dist/$name/"
+            fi
+          done
       - name: Archive
         working-directory: dist
         run: |
-          if [ "$RUNNER_OS" = Windows ]; then
-            7z a -tzip "$PACKAGE.zip" "$PACKAGE" > /dev/null
-          else
-            tar -czf "$PACKAGE.tar.gz" "$PACKAGE"
-          fi
-          rm -rf "$PACKAGE"
-      - name: Smoke test the unpacked archive
+          for variant in $VARIANTS; do
+            name="$PACKAGE-$variant"
+            if [ "$RUNNER_OS" = Windows ]; then
+              7z a -tzip "$name.zip" "$name" > /dev/null
+            else
+              tar -czf "$name.tar.gz" "$name"
+            fi
+            rm -rf "$name"
+          done
+      - name: Smoke test the unpacked archives
         run: |
-          mkdir smoke
-          cd smoke
-          if [ "$RUNNER_OS" = Windows ]; then 7z x "../dist/$PACKAGE.zip" > /dev/null; else tar -xzf "../dist/$PACKAGE.tar.gz"; fi
-          cd "$PACKAGE"
-          ./altd-sim --version | tee version.txt
-          grep -qxF "altd-sim $ALTD_BUILD_VERSION" version.txt
-          ./altd-sim --threads 2 train-scratch \
-            --scene assets/scenes/rally_template.json --track-mode random \
-            --random-track-settings assets/random_track_settings.json \
-            --population 16 --generations 1 --ticks 60 --seed 1 --out-dir smoke-run
-          test -s smoke-run/run.json
-          if [ "${{ matrix.gpu }}" = true ]; then
-            # Hosted runners lack ROCm: the packaged library must be found and
-            # its missing HIP runtime reported. gpu-verify loads it with ROCm.
-            if ./altd-sim gpu-info 2> gpu-info.txt; then exit 1; fi
-            cat gpu-info.txt
-            grep -q "$PWD/libaltd_gpu.so" gpu-info.txt
-            grep -q "ROCm 7.x runtime" gpu-info.txt
-          fi
+          for variant in $VARIANTS; do
+            name="$PACKAGE-$variant"
+            mkdir -p "smoke/$variant"
+            cd "smoke/$variant"
+            if [ "$RUNNER_OS" = Windows ]; then 7z x "../../dist/$name.zip" > /dev/null; else tar -xzf "../../dist/$name.tar.gz"; fi
+            cd "$name"
+            ./altd-sim --version | tee version.txt
+            grep -qxF "altd-sim $ALTD_BUILD_VERSION" version.txt
+            ./altd-sim --threads 2 train-scratch \
+              --scene assets/scenes/rally_template.json --track-mode random \
+              --random-track-settings assets/random_track_settings.json \
+              --population 16 --generations 1 --ticks 60 --seed 1 --out-dir smoke-run
+            test -s smoke-run/run.json
+            # The path the binary reports for the library beside it.
+            if [ "$RUNNER_OS" = Windows ]; then library=$(cygpath -w "$PWD/$LIBRARY"); else library="$PWD/$LIBRARY"; fi
+            case "$variant" in
+              amd)
+                # Hosted runners lack the HIP runtime: the packaged library must be
+                # found and fail to load. gpu-verify and gpu-windows-amd load it with HIP.
+                if ./altd-sim gpu-info 2> gpu-info.txt; then exit 1; fi
+                cat gpu-info.txt
+                grep -qF "$library" gpu-info.txt
+                if [ "$RUNNER_OS" = Linux ]; then grep -q "ROCm 7.x runtime" gpu-info.txt; fi
+                ;;
+              nvidia)
+                # The CUDA runtime is linked in and finds no driver, so the library
+                # loads and gpu-info checks its layouts without a GPU.
+                ./altd-sim gpu-info | tee gpu-info.json
+                grep -q '"layout": "ok"' gpu-info.json
+                grep -q '"platform": "CUDA"' gpu-info.json
+                grep -qF "\"${library//\\/\\\\}\"" gpu-info.json
+                ;;
+            esac
+            cd "$GITHUB_WORKSPACE"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PACKAGE }}
@@ -195,8 +335,8 @@ jobs:
           name: ${{ env.PACKAGE }}
       - name: Load the packaged HIP library with the ROCm runtime
         run: |
-          tar -xzf "$PACKAGE.tar.gz"
-          cd "$PACKAGE"
+          tar -xzf "$PACKAGE-amd.tar.gz"
+          cd "$PACKAGE-amd"
           # No GPU is needed: gpu-info checks the device struct layouts on the host.
           ./altd-sim gpu-info | tee gpu-info.json
           grep -q '"layout": "ok"' gpu-info.json
@@ -242,3 +382,7 @@ jobs:
             gh release create nightly --prerelease --latest=false --verify-tag --title "$title" --notes "$notes"
           fi
           gh release upload nightly dist/* --clobber
+          # Drop assets this build no longer produces, such as renamed archives.
+          gh release view nightly --json assets --jq '.assets[].name' | while read -r asset; do
+            if [ ! -e "dist/$asset" ]; then gh release delete-asset nightly "$asset" --yes; fi
+          done

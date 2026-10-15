@@ -16,15 +16,19 @@ Download the archive for your system from [Releases](https://github.com/Zorro909
 
 | System | Archive | Training on |
 | --- | --- | --- |
-| Linux x86_64 | `altd-sim-<version>-x86_64-unknown-linux-gnu.tar.gz` | CPU, or AMD GPU through HIP |
-| Windows x86_64 | `altd-sim-<version>-x86_64-pc-windows-msvc.zip` | CPU |
-| macOS, Apple silicon | `altd-sim-<version>-aarch64-apple-darwin.tar.gz` | CPU |
+| Linux x86_64 | `altd-sim-<version>-x86_64-unknown-linux-gnu-cpu.tar.gz` | CPU |
+| | `altd-sim-<version>-x86_64-unknown-linux-gnu-amd.tar.gz` | CPU, or AMD GPU through HIP |
+| | `altd-sim-<version>-x86_64-unknown-linux-gnu-nvidia.tar.gz` | CPU, or NVIDIA GPU through CUDA |
+| Windows x86_64 | `altd-sim-<version>-x86_64-pc-windows-msvc-cpu.zip` | CPU |
+| | `altd-sim-<version>-x86_64-pc-windows-msvc-amd.zip` | CPU, or AMD GPU through HIP |
+| | `altd-sim-<version>-x86_64-pc-windows-msvc-nvidia.zip` | CPU, or NVIDIA GPU through CUDA |
+| macOS, Apple silicon | `altd-sim-<version>-aarch64-apple-darwin-cpu.tar.gz` | CPU |
 
-Unpack it and open a terminal in the unpacked folder:
+The `amd` and `nvidia` archives add that vendor's GPU library beside the same `altd-sim` binary. Unpack one and open a terminal in the unpacked folder:
 
 ```sh
-tar -xzf altd-sim-nightly-x86_64-unknown-linux-gnu.tar.gz
-cd altd-sim-nightly-x86_64-unknown-linux-gnu
+tar -xzf altd-sim-nightly-x86_64-unknown-linux-gnu-cpu.tar.gz
+cd altd-sim-nightly-x86_64-unknown-linux-gnu-cpu
 ./altd-sim --version
 ```
 
@@ -68,13 +72,13 @@ Each browser connection gets its own session. Only one session at a time can use
 
 All builds include all three math profiles. Windows 11 24H2 and newer default to `win11-fma3`; earlier Windows releases use `win10-fma3`; Linux and macOS use `proton`. To train on Linux for a game running on current Windows, for example, pass `--math-profile win11-fma3`. Checkpoints retain their profile. [Math profiles](math/README.md) describes the kernels and captured reference data.
 
-### Training on an AMD GPU
+### Training on a GPU
 
-The Linux archive contains `libaltd_gpu.so` next to `altd-sim`. It needs a ROCm 7.x runtime and one of the [covered GPU architectures](gpu/README.md). `./altd-sim gpu-info` checks that the library loads and prints `"layout": "ok"`; with a GPU present it also runs one kernel and prints the device, and fails if the library has no code for that GPU; the server's `HIP:` line shows the device or why HIP is unavailable.
+The `amd` and `nvidia` archives contain the GPU library next to `altd-sim`: `libaltd_gpu.so` on Linux, `altd_gpu.dll` on Windows. AMD libraries need a ROCm 7.x runtime that provides `libamdhip64.so.7` on Linux, or an AMD driver or HIP SDK 7.1 that provides `amdhip64_7.dll` on Windows, and one of the [covered GPU architectures](gpu/README.md). NVIDIA libraries need only an NVIDIA driver that supports CUDA 13 (580 or newer) and a consumer GPU from RTX 20 (Turing) to RTX 50 (Blackwell) or newer; datacenter GPUs such as A100 and H100 need a library built for their target, see the [GPU guide](gpu/README.md#nvidia-cuda). `./altd-sim gpu-info` checks that the library loads and prints `"layout": "ok"`; with a GPU present it also runs one kernel and prints the device, and fails if the library has no code for that GPU; the server's `HIP:` line shows the device or why HIP is unavailable.
 
 A HIP session drives its first 12 ticks on both the GPU and the CPU and compares them. If they differ, or the network or track needs something HIP does not support, the session trains on CPU and Drive Lab shows the reason. Native CPU and HIP produce the same results. Browser training can differ from both in the last digits of a few values ([issue #3](https://github.com/Zorro909/driving_sim_rs/issues/3)), so a run moved between the browser and the server can develop differently from then on.
 
-NVIDIA GPUs use the same backend: build the library with `gpu/build-cuda.sh` (Linux) or `gpu/build-cuda.ps1` (Windows) as described in the [GPU guide](gpu/README.md#nvidia-cuda). The release archives do not include it.
+NVIDIA GPUs use the same backend, so HIP in Drive Lab and the server output also covers CUDA. To build a library yourself, see the [GPU guide](gpu/README.md).
 
 ### Troubleshooting
 
@@ -178,6 +182,6 @@ cargo build --offline --target wasm32-unknown-unknown --no-default-features --fe
 
 Tests retain self-contained native captures and label generated golden data as current-code regressions. Browser integration checks live in `wasm/test/`; HIP equivalence checks use `gpu_check`. The exhaustive trigonometry scan and hardware-dependent tests are opt-in. See [performance](docs/performance.md), [GPU internals](docs/gpu.md) and [WASM fidelity](docs/wasm.md).
 
-GitHub Actions checks formatting, native and WASM Clippy, native release and debug tests, Windows and macOS Clippy and release tests, the HIP library build and layout, rustdoc, Rust 1.93 compatibility, and WASM packages with CPU browser comparisons. The release workflow builds and smoke-tests the archives, then publishes tags and nightly builds. Its native jobs override `target-cpu=native` with `x86-64` and include the flags in their cache keys, so cached builds can move between runner CPUs. Serial/threaded browser tests retain the documented expanded native differences. HIP equivalence and hardware WebGPU checks run separately because the hosted runners have no GPU.
+GitHub Actions checks formatting, native and WASM Clippy, native release and debug tests, Windows and macOS Clippy and release tests, the HIP library build and layout, rustdoc, Rust 1.93 compatibility, and WASM packages with CPU browser comparisons. The release workflow builds the AMD and NVIDIA libraries for Linux and Windows, smoke-tests the CPU, AMD and NVIDIA archives, then publishes tags and nightly builds. Its native jobs override `target-cpu=native` with `x86-64` and include the flags in their cache keys, so cached builds can move between runner CPUs. Serial/threaded browser tests retain the documented expanded native differences. HIP equivalence and hardware WebGPU checks run separately because the hosted runners have no GPU.
 
 The project uses the [MIT license](LICENSE). Godot-derived code retains the [Godot notice](GODOT_LICENSE), and numerical modules retain their source notices.

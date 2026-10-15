@@ -502,7 +502,8 @@ double thread_cpu_seconds() {
 // runtime's single-dispatch limit, so by default every launch allocates and
 // frees it (0.2-1.7 ms per launch). Keeping the scratch avoids that. Runs at
 // load, before the first HIP call initialises HSA; an explicit setting wins.
-#if !defined(__CUDACC__)
+// HIP on Windows runs on PAL instead of HSA, and its C runtime has no setenv.
+#if !defined(__CUDACC__) && !defined(_WIN32)
 __attribute__((constructor)) void keep_scratch() { setenv("HSA_NO_SCRATCH_RECLAIM", "1", 0); }
 #endif
 
