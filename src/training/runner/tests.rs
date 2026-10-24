@@ -391,7 +391,7 @@ fn preview_matches_car_trajectory_without_mutating_population() {
     let frames = runner.preview_agent(0, 120).unwrap();
     assert!(!frames.is_empty());
     assert_same_agents(&runner, &reference);
-    for frame in &frames {
+    for frame in frames.iter().filter(|f| f["reason"].is_null()) {
         let tick = frame["tick_end"].as_u64().unwrap();
         reference.advance(tick - reference.tick, false);
         assert_eq!(

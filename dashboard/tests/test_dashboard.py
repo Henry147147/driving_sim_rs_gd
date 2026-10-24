@@ -153,9 +153,31 @@ def test_example_selection_and_config_copy(setup):
     (folder/'examples/u000001_e02.json').write_text(json.dumps(example))
     items=client.get('/api/examples',params={'path':'runs/examples'}).json()
     assert items[0]['label']==example['label']
+    assert client.get('/api/examples',params={'path':'runs/examples','since':time.time()+1}).json()==[]
     result=client.get('/api/preview',params={'path':'runs/examples','example':items[0]['name']}).json()
     assert result['points'][0]['tick']==4 and result['recorded']
     assert client.get('/api/preview',params={'path':'runs/examples','example':'../../secret.json'}).status_code==400
     saved=client.post('/api/config',headers=headers,json={'text':'{"length":{"min":12,"max":40}}','format':'json'}).json()
     assert saved['path'].endswith('.json')
     assert client.get('/api/config-data',params={'path':saved['path']}).json()['value']['length']['min']==12
+
+
+def test_fresh_run_reusing_output_gets_its_own_history(setup):
+    client,state,headers,repo=setup
+    payload=dict(tool='train',arguments=['--out','runs/reused','--updates','3'])
+    first=wait(client,client.post('/api/jobs',headers=headers,json=payload).json()['id'])
+    payload['arguments'][-1]='1'
+    second=wait(client,client.post('/api/jobs',headers=headers,json=payload).json()['id'])
+    assert first['output']!=second['output']
+    assert len(second['summary']['updates'])==1
+    assert len(client.get('/api/run',params={'path':first['output']}).json()['updates'])==3
+
+
+def test_job_summary_offsets_hide_preexisting_rows_and_results(setup):
+    client,state,headers,repo=setup
+    folder=repo/'runs/offsets';folder.mkdir()
+    old='{"update":9}\n';(folder/'updates.jsonl').write_text(old)
+    (folder/'evaluation.json').write_text('{"attempts":999}')
+    (folder/'updates.jsonl').write_text(old+'{"update":10}\n')
+    summary=state.summary(folder,{'updates.jsonl':len(old)},since=time.time()+1)
+    assert summary['updates']==[{'update':10}] and summary['report'] is None and not summary['files']

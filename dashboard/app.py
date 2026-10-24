@@ -56,9 +56,15 @@ def tail(path: Path, limit=120_000):
         return ''
 
 
-def json_lines(path: Path, limit=500):
+def json_lines(path: Path, limit=500, offset=0):
     rows = []
-    for line in tail(path, 700_000).splitlines():
+    if offset:
+        try:
+            with path.open('rb') as stream:
+                stream.seek(max(offset,path.stat().st_size-700_000));source=stream.read(700_000).decode('utf-8',errors='replace')
+        except OSError:source=''
+    else:source=tail(path,700_000)
+    for line in source.splitlines():
         try:
             value = json.loads(line)
             if isinstance(value, dict):
@@ -165,9 +171,10 @@ print(json.dumps(r))"""
         result.update(python=self.gpu_python(),simulator_library=str(library) if library.is_file() else None)
         return result
 
-    def examples(self,folder):
+    def examples(self,folder,since=None):
         result=[]
         for p in sorted((folder/'examples').glob('*.json'))[-2000:]:
+            if since is not None and p.stat().st_mtime<since:continue
             v=read_json(p,{})
             if v.get('schema')=='altd_training_example_v1':
                 result.append(dict(name=p.name,label=v.get('label',p.stem)))
@@ -217,8 +224,16 @@ print(json.dumps(r))"""
         if not isinstance(tool,str): raise HTTPException(400,'Choose a command')
         if not isinstance(args, list) or len(args)>2048 or any(not isinstance(x, str) or chr(0) in x or len(x)>100_000 for x in args):
             raise HTTPException(400, 'Arguments must be a JSON array of strings')
-        command = self.command(tool, args)
+        args=list(args)
         output = self.output_for(tool, args)
+        training_tool=tool in ('train','compare','experiments','trace','native:train-scratch') or (tool=='native' and 'train-scratch' in args)
+        resume=any(x=='--resume' or x.startswith('--resume=') for x in args)
+        if training_tool and output and not resume and Path(output).is_dir() and any(Path(output).iterdir()):
+            old=Path(output);output=str(self.path(str(old.with_name(old.name+'-'+time.strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:6]))))
+            flag='--out-dir' if tool=='native:train-scratch' or (tool=='native' and 'train-scratch' in args) else '--out'
+            if flag in args:args[args.index(flag)+1]=output
+            else:args.extend([flag,output])
+        command = self.command(tool, args)
         with self.lock:
             if any(j['status'] in ACTIVE for j in self.jobs.values()):
                 raise HTTPException(409, 'A job is already running. Stop it or wait for completion.')
@@ -233,11 +248,17 @@ print(json.dumps(r))"""
             env=self.environment()
             env['RACING_LAB_STOP_FILE']=str(stop)
             env['PYTHONPATH']=str(ROOT/'runtime')+os.pathsep+env.get('PYTHONPATH','')
+            offsets={name:(Path(output)/name).stat().st_size for name in ('updates.jsonl','log.jsonl','episodes.jsonl') if output and (Path(output)/name).is_file()}
+            generation_start=None
+            if resume and (tool=='native:train-scratch' or (tool=='native' and 'train-scratch' in args)):
+                generation_start=(read_json(Path(output)/'checkpoint.json',{}) or {}).get('generation') if output else None
+                if generation_start is not None:offsets.pop('log.jsonl',None)
+            started=time.time()
             with (folder/'console.log').open('wb') as stream:
                 proc = subprocess.Popen(argv, cwd=self.repo, env=env, stdout=stream,
                                         stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, creationflags=flags)
             job = dict(id=ident, tool=tool, arguments=args, output=output, status='running',
-                       python=interpreter, started=time.time(), finished=None, pid=proc.pid,
+                       python=interpreter, offsets=offsets, generation_start=generation_start, started=started, finished=None, pid=proc.pid,
                        process_created=psutil.Process(proc.pid).create_time(), exit_code=None)
             self.jobs[ident] = job
             self.persist(job)
@@ -300,9 +321,11 @@ print(json.dumps(r))"""
                     except psutil.Error: pass
             return job.copy()
 
-    def summary(self, folder):
-        updates = json_lines(folder/'updates.jsonl') or json_lines(folder/'log.jsonl')
-        episodes = json_lines(folder/'episodes.jsonl', 100)
+    def summary(self, folder, offsets=None, since=None,generation_start=None):
+        offsets=offsets or {}
+        updates = json_lines(folder/'updates.jsonl',offset=offsets.get('updates.jsonl',0)) or json_lines(folder/'log.jsonl',offset=offsets.get('log.jsonl',0))
+        if generation_start is not None:updates=[r for r in updates if r.get('generation',-1)>=generation_start]
+        episodes = json_lines(folder/'episodes.jsonl',100,offset=offsets.get('episodes.jsonl',0))
         rates = []
         for i in range(0, len(episodes), 10):
             group = episodes[i:i+10]
@@ -312,11 +335,11 @@ print(json.dumps(r))"""
         files = []
         if folder.is_dir():
             for p in sorted(folder.iterdir(), key=lambda x:x.name):
-                if p.is_file() and p.suffix.lower() in ('.pt','.json','.jsonl','.npz','.bin','.yaml','.yml'):
+                if p.is_file() and (since is None or p.stat().st_mtime>=since) and p.suffix.lower() in ('.pt','.json','.jsonl','.npz','.bin','.yaml','.yml'):
                     files.append(dict(name=p.name, path=str(p), size=p.stat().st_size))
         report = None
         for name in ('evaluation.json','report.json','best_validation.json','episodes.json','inspection.json'):
-            if (folder/name).is_file() and (folder/name).stat().st_size <= 5_000_000:
+            if (folder/name).is_file() and (since is None or (folder/name).stat().st_mtime>=since) and (folder/name).stat().st_size <= 5_000_000:
                 report = read_json(folder/name)
                 if report is not None: break
         return dict(updates=updates, episodes=episodes, episode_trend=rates, files=files, report=report)
@@ -326,7 +349,7 @@ print(json.dumps(r))"""
             if not re.fullmatch(r'[a-zA-Z0-9_-]+\.json',example): raise HTTPException(400,'Invalid example name')
             v=read_json(folder/'examples'/example)
             if not v or v.get('schema')!='altd_training_example_v1': raise HTTPException(404,'Example not found')
-            points=[dict(position=x['position'],tick=x.get('tick_end'),episode=x.get('episode_id'),reason=x.get('reason')) for x in v['frames']]
+            points=[dict(position=x['position'],tick=x.get('tick_end'),episode=x.get('episode_id'),reason=x.get('reason'),rotation=x.get('rotation')) for x in v['frames']]
             return dict(cells=v.get('cells',[]),centerline=v.get('centerline',[]),walls=v.get('walls',[]),points=points,recorded=True,note=v.get('note',''),label=v.get('label',''))
         config = read_json(folder/'resolved_config.json')
         if not config:
@@ -389,7 +412,9 @@ def create_app(repo, python=sys.executable, data=None, token='', hosts=('127.0.0
                 return JSONResponse({'detail':'Enter the dashboard access token'},401)
             if request.method not in ('GET','HEAD') and not hmac.compare_digest(request.headers.get('x-csrf-token',''),state.csrf):
                 return JSONResponse({'detail':'Refresh the dashboard before submitting changes'},403)
-        return await call_next(request)
+        response=await call_next(request)
+        if request.url.path in ('/','/app.js','/style.css'):response.headers['Cache-Control']='no-store'
+        return response
 
     @app.get('/api/bootstrap')
     def bootstrap():
@@ -409,7 +434,7 @@ def create_app(repo, python=sys.executable, data=None, token='', hosts=('127.0.0
         except (OSError,yaml.YAMLError) as e: raise HTTPException(400,str(e))
 
     @app.get('/api/examples')
-    def examples(path: str): return state.examples(state.path(path,directory=True))
+    def examples(path: str,since: float | None=None): return state.examples(state.path(path,directory=True),since)
 
     @app.get('/api/jobs')
     def jobs():
@@ -425,8 +450,10 @@ def create_app(repo, python=sys.executable, data=None, token='', hosts=('127.0.0
         result=state.get(ident).copy()
         result['log']=tail(state.data/'jobs'/ident/'console.log')
         out=Path(result['output']) if result.get('output') else state.data/'jobs'/ident
-        result['summary']=state.summary(out if out.is_dir() else out.parent)
-        if out.is_file() and out.suffix=='.json': result['summary']['report']=read_json(out)
+        result['summary']=state.summary(out if out.is_dir() else out.parent,result.get('offsets'),result['started'],result.get('generation_start'))
+        if out.suffix=='.json':
+            current=out.is_file() and out.stat().st_mtime>=result['started']
+            result['summary'].update(updates=[],episodes=[],episode_trend=[],report=read_json(out) if current else None,files=[dict(name=out.name,path=str(out),size=out.stat().st_size)] if current else [])
         if not result['summary']['updates']:
             result['summary']['updates']=[v for v in json_lines(state.data/'jobs'/ident/'console.log') if 'update' in v or 'generation' in v]
         return clean(result)

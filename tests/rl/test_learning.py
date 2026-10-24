@@ -83,9 +83,45 @@ def test_epoch_previews_do_not_change_policy_rng_or_training_env(tmp_path):
         before=copy.deepcopy(p.state_dict());rng=torch.get_rng_state();obs=e.observe().copy()
         path=record_example(p,c,tmp_path,1,epoch);v=json.loads(path.read_text())
         assert v['epoch']==epoch and v['cells'] and len(v['frames'])>1
-        assert v['frames'][-1]['tick_end']>=24 or v['frames'][-1]['reason'] is not None
+        assert v['frames'][0]['tick_end']==0 and v['frames'][-1]['reason'] is not None
+        assert not v['limited'] and v['terminal_reason']==v['frames'][-1]['reason']
         assert all(torch.equal(before[k],v) for k,v in p.state_dict().items())
         assert torch.equal(rng,torch.get_rng_state())
         np.testing.assert_array_equal(obs,e.observe());callbacks.append(epoch)
     m=update(p,opt,b,c['learner'],epoch_callback=preview)
     assert callbacks==list(range(1,m['epochs_completed']+1))
+
+
+def test_game_track_curriculum_is_deterministic_and_changes_geometry(tmp_path):
+    import json
+    from altd_rl.random_tracks import resolve_track
+    c=load_config('configs/rl/random_ppo.yaml');c['environment']['num_envs']=1
+    first=resolve_track(c,tmp_path,1729,0);a=VecEnv(first)
+    second=resolve_track(c,tmp_path,1729,1);b=VecEnv(second)
+    again=VecEnv(resolve_track(c,tmp_path,1729,0))
+    assert a.provenance['scene_hash']==again.provenance['scene_hash']
+    assert a.provenance['route_hash']!=b.provenance['route_hash']
+    route=a.provenance['native_config']['route']
+    assert len(route['cells'])==first['scenario']['target_gates']
+    assert route['id'].startswith('game_')
+    meta=json.loads((tmp_path/'tracks/t000000.track.json').read_text())
+    assert meta['tiles'] and meta['rl_adapter']['native_generation']>=0
+
+
+def test_custom_sensor_layout_changes_network_input_shape(tmp_path):
+    import json
+    c=load_config('configs/rl/segment_ppo.yaml');c['environment']['num_envs']=1
+    layout=dict(names=['front','speed'],sensors=[{'$type':'raycast','Degrees':0,'Length':600},{'$type':'speed'}])
+    path=tmp_path/'sensors.json';path.write_text(json.dumps(layout));c['scenario']['sensors']=str(path)
+    e=VecEnv(c);p=ActorCritic(e.d,[32,16]);assert e.d==14 and p.actor[0].in_features==14
+    assert e.schema['names'][:2]==layout['names']
+    assert p.action(torch.from_numpy(e.observe()),True)[0].shape==(1,5)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA PyTorch required')
+def test_cuda_checkpoint_rng_restores_after_cuda_map_location(tmp_path):
+    p=ActorCritic(14,[8]).cuda();opt=torch.optim.Adam(p.parameters())
+    checkpoint.save(tmp_path/'gpu.pt',p,opt,{}, {}, {})
+    c=checkpoint.load(tmp_path/'gpu.pt','cuda')
+    checkpoint.restore_rng(c);expected=torch.rand(8,device='cuda')
+    checkpoint.restore_rng(c);torch.testing.assert_close(expected,torch.rand(8,device='cuda'))

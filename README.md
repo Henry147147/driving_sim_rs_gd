@@ -8,7 +8,7 @@ The repository includes vehicle and sensor templates, tile resources, fixed gene
 
 ## Local training dashboard
 
-The repository includes a hostable web GUI for PPO, FlashSAC, GA/ARS and all CLI tools, with configuration sliders/toggles, live graphs, logs, checkpoints and per-epoch/generation driving examples.
+The repository includes a hostable web GUI for PPO, FlashSAC, GA/ARS and all CLI tools, with visible configuration and sensor controls, editable network shapes, random game-track PPO training, live graphs, logs, checkpoints and complete per-epoch/generation driving attempts.
 
 ```powershell
 $env:RUSTUP_TOOLCHAIN="1.95"

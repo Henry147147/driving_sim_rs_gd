@@ -110,12 +110,22 @@ impl TrainingRunner {
         let mut agent = self.agents.get(index).ok_or("preview car outside population")?.clone();
         let schedule = self.schedule();
         let bpt = self.batches_per_tick();
-        let mut frames = Vec::new();
+        let initial = agent.car.position;
+        let mut frames = vec![
+            serde_json::json!({"position":[initial.x,initial.y],"rotation":agent.car.rotation,"tick_end":self.tick,"episode_id":0,"reason":null}),
+        ];
         let (duration, limit) = self.generation_window(ticks);
         for k in 1..=duration {
             let tick = self.tick + k;
             schedule.update_stats(&mut agent, tick);
             if !agent.car.active || (tick % 6 == self.stats_phase && ((tick - 6) / 6) as f64 * 0.1 >= limit) {
+                let p = agent.car.position;
+                let reason = if agent.car.active {
+                    "generation_deadline"
+                } else {
+                    "eliminated"
+                };
+                frames.push(serde_json::json!({"position":[p.x,p.y],"rotation":agent.car.rotation,"tick_end":tick,"episode_id":0,"reason":reason}));
                 break;
             }
             let batch = (self.batch_index + ((k - 1) as usize % 8) * bpt) % 8;
@@ -125,7 +135,10 @@ impl TrainingRunner {
                 break;
             }
             if k == 1 || k % 4 == 0 || !agent.car.active {
-                frames.push(serde_json::json!({"position":[p.x,p.y],"rotation":agent.car.rotation,"tick_end":tick,"episode_id":0}));
+                frames.push(serde_json::json!({"position":[p.x,p.y],"rotation":agent.car.rotation,"tick_end":tick,"episode_id":0,"reason":if agent.car.active {None} else {Some("eliminated")}}));
+            }
+            if !agent.car.active {
+                break;
             }
         }
         Ok(frames)

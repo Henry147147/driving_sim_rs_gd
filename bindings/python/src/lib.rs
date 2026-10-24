@@ -40,5 +40,14 @@ impl NativeEnv {
         Ok((bytes(py,b.observations),bytes(py,b.next_observations),meta))
     }
 }
+#[pyfunction]
+fn random_track_scene(template_json:&str,settings_json:&str,seed:i64,generation:u64,math_profile:&str)->PyResult<String> {
+    let template=serde_json::from_str(template_json).map_err(err)?;
+    let settings=serde_json::from_str::<altd_sim::track::training_tracks::RandomTrainingTrackSettings>(settings_json).map_err(err)?;
+    settings.validate().map_err(err)?;
+    let math=altd_sim::math::profile::MathProfile::parse(math_profile).ok_or_else(||err("unknown math profile"))?;
+    let (track,scene)=altd_sim::track::training_tracks::training_scene_at(&template,&settings,None,seed,generation,0,math).map_err(err)?;
+    Ok(serde_json::json!({"scene":scene,"track":track}).to_string())
+}
 #[pymodule]
-fn _native(m:&Bound<'_,PyModule>)->PyResult<()> {m.add_class::<NativeEnv>()?;Ok(())}
+fn _native(m:&Bound<'_,PyModule>)->PyResult<()> {m.add_class::<NativeEnv>()?;m.add_function(wrap_pyfunction!(random_track_scene,m)?)?;Ok(())}

@@ -21,7 +21,7 @@ def load(path,device='cpu'):
 
 def restore_rng(c):
     torch.set_rng_state(c['rng']['torch'].cpu());np.random.set_state(c['rng']['numpy']);random.setstate(c['rng']['python'])
-    if c['rng']['cuda'] and torch.cuda.is_available():torch.cuda.set_rng_state_all(c['rng']['cuda'])
+    if c['rng']['cuda'] and torch.cuda.is_available():torch.cuda.set_rng_state_all([state.cpu() for state in c['rng']['cuda']])
 
 def export_actor(path,policy,provenance):
     torch.save(dict(schema='altd_native_actor_v1',architecture=dict(obs_dim=policy.obs_dim,hidden=policy.hidden),

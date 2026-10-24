@@ -13,7 +13,7 @@ const assert=require('node:assert/strict');
   await page.click('#startBtn');const reply=await response;assert.equal(reply.status(),200,await reply.text());
   const job=await reply.json();await page.waitForFunction(id=>state.job===id&&document.querySelector('#status').textContent==='Completed',job.id,{timeout:90000});return job;
  }
- await page.selectOption('#tool','train');await page.fill('#count','12');await page.fill('#output',train);await launch();
+ await page.selectOption('#tool','train');await page.fill('#config','configs/rl/segment_ppo.yaml');await page.locator('#config').dispatchEvent('change');await page.waitForFunction(()=>state.quickConfigPath==='configs/rl/segment_ppo.yaml');await page.fill('#count','12');await page.fill('#output',train);await launch();
  assert.equal(await page.locator('#update').textContent(),'12');await page.screenshot({path:'.dashboard/progress.png',fullPage:true});
  await page.selectOption('#tool','evaluate');await page.fill('#checkpoint',train+'/best.pt');await page.fill('#count','2');await page.fill('#output',train+'/evaluation.json');await launch();
  assert.equal(await page.locator('#completion').textContent(),'2 / 2');

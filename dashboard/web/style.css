@@ -3,3 +3,9 @@
 #status[data-state="failed"],#status[data-state="interrupted"]{color:#ffad9f}
 
 .config-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}.config-grid label{margin:9px 0}.config-grid input[type=range]{padding:0;accent-color:var(--green)}.config-grid output{float:right;color:var(--green)}#editor{width:min(900px,95vw);max-width:900px}#exampleSelect{max-width:230px;margin:0}.preview .heading,.preview .actions{flex-wrap:wrap}@media(max-width:730px){.config-grid{grid-template-columns:1fr}}
+
+#quickSettings{margin-bottom:24px}#quickSettings .config-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.slider-number{display:flex;align-items:center;gap:10px}.slider-number input[type=number]{width:95px}.cli-helpers{display:grid;gap:0 12px}.cli-helpers .check{margin:8px 0}#quickSettings select{margin-bottom:8px}@media(max-width:1150px){#quickSettings .config-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:730px){#quickSettings .config-grid{grid-template-columns:1fr}}
+
+#networkControls{margin-top:24px;border-top:1px solid var(--line);padding-top:20px}#networkShape{display:block;color:var(--green);margin:15px 0}.sensor-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.sensor-row{padding:8px 12px;border:1px solid var(--line);border-radius:6px}.sensor-row .check{flex-wrap:wrap}.sensor-row small{color:var(--muted)}.sensor-row input[type=number]{padding:6px}@media(max-width:1150px){.sensor-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:730px){.sensor-grid{grid-template-columns:1fr}}
+
+.tabs{flex-wrap:wrap;gap:12px}.inline select{min-width:0;flex:1}.slider-number input[type=range]{min-width:0;flex:1}.slider-number input[type=number]{flex:0 0 95px}
