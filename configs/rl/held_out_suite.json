@@ -1,0 +1,11 @@
+{
+  "schema": "altd_rl_eval_v1",
+  "episodes": 32,
+  "seeds": [
+    9001,
+    9002,
+    9003
+  ],
+  "reliability_threshold": 0.9,
+  "config": "configs/rl/rally_ppo.yaml"
+}

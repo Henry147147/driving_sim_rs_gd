@@ -24,3 +24,6 @@ pub mod training;
 /// JavaScript bindings and WebGPU execution.
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 pub mod wasm;
+
+/// Batched reinforcement-learning execution, independent of population training.
+pub mod rl;

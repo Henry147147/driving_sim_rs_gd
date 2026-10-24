@@ -187,6 +187,9 @@ struct Sim {
     size_t stride;   // parameters per network
     double* params;  // capacity * stride, one network per car
     uint32_t network_count;
+    double* rl_controls;
+    uint8_t* rl_live;
+    void* rl_reports;
     double* mean;
     double* novelty;
     // altd_gpu_sim_window: work lists, settling, device state, stop polling.
@@ -691,7 +694,7 @@ ALTD_API void altd_gpu_sim_free(Sim* s) {
     if (s->graph_exec) (void)hipGraphExecDestroy(s->graph_exec);
     for (void* p : {(void*)s->cars, (void*)s->agents, (void*)s->here, (void*)s->inputs, (void*)s->params, (void*)s->live[0],
                     (void*)s->live[1], (void*)s->steps[0], (void*)s->steps[1], (void*)s->settled_at, (void*)s->shadow, (void*)s->state,
-                    (void*)s->carry, (void*)s->items, (void*)s->pushes, (void*)s->mean, (void*)s->novelty, (void*)s->active})
+                    (void*)s->carry, (void*)s->items, (void*)s->pushes, (void*)s->mean, (void*)s->novelty, (void*)s->active, (void*)s->rl_controls, (void*)s->rl_live, s->rl_reports})
         if (p) (void)hipFree(p);
     if (s->host_stopped) (void)hipHostFree(s->host_stopped);
     for (hipEvent_t e : s->chunk_done)
@@ -1385,3 +1388,46 @@ ALTD_API int altd_gpu_engine_scan(uint32_t first, uint32_t n, uint32_t* out) {
 }
 
 }  // extern "C"
+
+
+// Independent external-action RL ABI. No inference, stats, or legacy graph runs here.
+// Reports contain only rule/observation facts; collision caches stay on device.
+struct RlReport { float pose[20]; uint32_t flags[4]; uint64_t tick; };
+static_assert(sizeof(RlReport) == 104);
+__global__ void rl_controls_kernel(Agent* agents, const double* controls, uint32_t n) {
+    uint32_t i=blockIdx.x*blockDim.x+threadIdx.x;
+    if(i<n) for(int j=0;j<5;++j) agents[i].controls[j]=controls[5*i+j];
+}
+__global__ void rl_step_kernel(World w, VehicleDesc v, Car* cars, Agent* agents, const uint8_t* live, uint32_t n, RlReport* out) {
+    uint32_t i=blockIdx.x*blockDim.x+threadIdx.x;
+    if(i>=n) return;
+    if(live[i]) { agents[i].flags &= ~AGENT_PENDING_CONTACT; step_car(w,v,cars[i],agents[i],true,false,cars[i].tick+1); }
+    const Car& c=cars[i]; RlReport r{};
+    r.pose[0]=c.position.x;r.pose[1]=c.position.y;r.pose[2]=c.velocity.x;r.pose[3]=c.velocity.y;
+    r.pose[4]=c.acceleration.x;r.pose[5]=c.acceleration.y;r.pose[6]=c.basis_x.x;r.pose[7]=c.basis_x.y;
+    r.pose[8]=c.basis_y.x;r.pose[9]=c.basis_y.y;r.pose[10]=c.rotation;r.pose[11]=c.transform_angle;
+    r.pose[12]=c.angular_velocity;r.pose[13]=c.boost_energy;
+    for(int j=0;j<MAX_WHEELS;++j) r.pose[14+j]=c.wheel_angle[j];
+    r.flags[0]=c.collision_count;r.flags[1]=c.flags;r.flags[2]=c.error;r.flags[3]=agents[i].flags & AGENT_PENDING_CONTACT;r.tick=c.tick;out[i]=r;
+}
+extern "C" ALTD_API int altd_gpu_rl_controls(Sim* s, uint32_t n, const double* controls) {
+    if(n!=s->n) return -1;
+    if(!s->rl_controls) CHECK(hipMalloc(&s->rl_controls,sizeof(double)*s->capacity*5));
+    CHECK(hipMemcpy(s->rl_controls,controls,sizeof(double)*n*5,hipMemcpyHostToDevice));
+    if(n) rl_controls_kernel<<<blocks(n),256>>>(s->agents,s->rl_controls,n);
+    CHECK(hipGetLastError());return 0;
+}
+extern "C" ALTD_API int altd_gpu_rl_tick(Sim* s, uint32_t n, const uint8_t* live, RlReport* out) {
+    if(n!=s->n) return -1;
+    if(!s->rl_live) CHECK(hipMalloc(&s->rl_live,s->capacity));
+    if(!s->rl_reports) CHECK(hipMalloc(&s->rl_reports,sizeof(RlReport)*s->capacity));
+    CHECK(hipMemcpy(s->rl_live,live,n,hipMemcpyHostToDevice));
+    if(n) rl_step_kernel<<<blocks(n,STEP_THREADS),STEP_THREADS>>>(s->world,s->vehicle,s->cars,s->agents,s->rl_live,n,(RlReport*)s->rl_reports);
+    CHECK(hipGetLastError());CHECK(hipMemcpy(out,s->rl_reports,n*sizeof(RlReport),hipMemcpyDeviceToHost));return 0;
+}
+extern "C" ALTD_API int altd_gpu_rl_reset(Sim* s, uint32_t id, const Car* car) {
+    if(id>=s->n) return -1;
+    Agent agent{};
+    CHECK(hipMemcpy(s->cars+id,car,sizeof(Car),hipMemcpyHostToDevice));
+    CHECK(hipMemcpy(s->agents+id,&agent,sizeof(Agent),hipMemcpyHostToDevice));return 0;
+}

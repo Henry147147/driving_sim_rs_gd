@@ -1,0 +1,118 @@
+{
+  "names": [
+    "ray_-90",
+    "ray_-75",
+    "ray_-60",
+    "ray_-45",
+    "ray_-30",
+    "ray_-15",
+    "ray_0",
+    "ray_15",
+    "ray_30",
+    "ray_45",
+    "ray_60",
+    "ray_75",
+    "ray_90",
+    "AngVel",
+    "Boost",
+    "Dir",
+    "Grip",
+    "VelF",
+    "VelS",
+    "Curve"
+  ],
+  "sensors": [
+    {
+      "$type": "raycast",
+      "Degrees": -90,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": -75,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": -60,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": -45,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": -30,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": -15,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": 0,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": 15,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": 30,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": 45,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": 60,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": 75,
+      "Length": 800
+    },
+    {
+      "$type": "raycast",
+      "Degrees": 90,
+      "Length": 800
+    },
+    {
+      "$type": "angularVelocity"
+    },
+    {
+      "$type": "boostCapacity"
+    },
+    {
+      "$type": "correctDirection"
+    },
+    {
+      "$type": "grip",
+      "PositionOffset": [
+        0,
+        0
+      ]
+    },
+    {
+      "$type": "velocityFront"
+    },
+    {
+      "$type": "velocitySide"
+    },
+    {
+      "$type": "trackCurvature",
+      "MinLookaheadDistance": 256,
+      "MaxLookaheadDistance": 512
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "schema": "altd_rl_config_v1",
+  "scenario": {
+    "id": "rally_ring_verified",
+    "task_kind": "full_lap",
+    "scene": "configs/rl/tracks/rally_ring_gpu.scene.json",
+    "track_metadata": "configs/rl/tracks/rally_ring.rules.json",
+    "sensors": "configs/rl/rally.sensors.json",
+    "target_gates": 64,
+    "deadline_physics_ticks": 7200
+  },
+  "environment": {
+    "backend": "gpu",
+    "num_envs": 64,
+    "physics_hz": 60,
+    "action_repeat_ticks": 4,
+    "math_profile": "proton",
+    "autoreset": false
+  },
+  "reward": {
+    "profile": "dense_progress_time_v1",
+    "gamma": 1.0
+  },
+  "learner": {
+    "algorithm": "ppo",
+    "hidden_sizes": [
+      128,
+      128
+    ],
+    "rollout_steps": 256,
+    "minibatch_size": 2048,
+    "epochs": 4,
+    "learning_rate": 0.0003,
+    "clip_epsilon": 0.2,
+    "gae_lambda": 0.95,
+    "value_coefficient": 0.5,
+    "entropy_coefficient": 0.0,
+    "max_grad_norm": 0.5,
+    "target_kl": 0.02
+  },
+  "logging": {
+    "episode_summaries": true,
+    "trace_mode": "off",
+    "reward_components": true
+  },
+  "training": {
+    "updates": 100,
+    "output": "runs/rally_gpu",
+    "torch_threads": 4,
+    "validation_every": 10,
+    "validation_episodes": 4,
+    "reliability_threshold": 0.9
+  }
+}

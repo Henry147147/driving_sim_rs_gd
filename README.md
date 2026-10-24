@@ -4,7 +4,7 @@
 
 `altd-sim` is a Rust vehicle simulator and neural-network trainer for AI Learns To Drive. It runs headless on the CPU, through a runtime-loaded AMD HIP library, or in WebAssembly. It reproduces the game's floating-point arithmetic, contact ordering, sensors and evolution behavior against captured regression fixtures. Exactness claims apply to the tested inputs; [fidelity](docs/fidelity.md) records the limits.
 
-The repository includes vehicle and sensor templates, tile resources, fixed generated tracks and self-contained tests. Campaign tracks are not distributed.
+The repository includes vehicle and sensor templates, tile resources, fixed generated tracks and self-contained tests. Campaign tracks are not distributed. Training supports the existing genetic algorithm (GA) and customized Augmented Random Search (ARS), plus a shared-policy PPO learner and an optional pinned FlashSAC research adapter. See [reinforcement learning](#reinforcement-learning) for the Python setup and commands.
 
 ## Getting started
 
@@ -185,3 +185,99 @@ Tests retain self-contained native captures and label generated golden data as c
 GitHub Actions checks formatting, native and WASM Clippy, native release and debug tests, Windows and macOS Clippy and release tests, the HIP library build and layout, rustdoc, Rust 1.93 compatibility, and WASM packages with CPU browser comparisons. The release workflow builds the AMD and NVIDIA libraries for Linux and Windows, smoke-tests the CPU, AMD and NVIDIA archives, then publishes tags and nightly builds. Its native jobs override `target-cpu=native` with `x86-64` and include the flags in their cache keys, so cached builds can move between runner CPUs. Serial/threaded browser tests retain the documented expanded native differences. HIP equivalence and hardware WebGPU checks run separately because the hosted runners have no GPU.
 
 The project uses the [MIT license](LICENSE). Godot-derived code retains the [Godot notice](GODOT_LICENSE), and numerical modules retain their source notices.
+
+## Reinforcement learning
+
+The optional Python package trains a shared driving policy from many independent cars in the Rust simulator. It includes batched CPU/GPU environments, explicit track-validity rules, per-step rewards, deterministic evaluation, checkpoints and compressed transition traces. These learners run from Python; `altd-sim serve` and the existing Drive Lab workflow continue to use the population-training interface.
+
+| Algorithm | Implementation | How to run |
+| --- | --- | --- |
+| GA | Existing genetic algorithm; evolves a population of networks. | `altd-sim train-scratch` with GA settings. |
+| Customized ARS | Existing Augmented Random Search with mirrored perturbations, elites and adaptive search settings. | `altd-sim train-scratch` with ARS settings. |
+| **PPO + GAE** | New shared actor/critic, bounded stochastic actions, clipped PPO updates and generalized advantage estimation. Supports training, stop/resume, actor export and deterministic evaluation. | `python -m altd_rl.train` |
+| **FlashSAC** | New adapter to the pinned official research implementation, using the same Rust environment and evaluator. Optional research dependencies are required. | `python -m altd_rl.compare` |
+
+The shipped tasks are a short segment and a full lap on a verified synthetic Rally ring. [Measured results](docs/rl-results.md) include three-seed PPO and FlashSAC experiments, unsuccessful runs and CPU/GPU throughput. They do not establish performance on campaign tracks or superiority over GA/ARS.
+
+### Install the Python learner
+
+Use the source checkout and run all commands from its root. Install Python 3.11+ and Rust 1.95.0 (the tested toolchain); FlashSAC also needs Git. The Python package installs its pinned NumPy, PyTorch and PyYAML dependencies and builds the native Rust binding. Ordinary Rust builds do not require Python.
+
+On Windows, in PowerShell:
+
+```powershell
+cd C:\Users\henry\Desktop\training\driving_sim_rs_gd
+rustup toolchain install 1.95.0 --profile minimal
+$env:RUSTUP_TOOLCHAIN = "1.95.0"
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install .
+```
+
+The explicit virtual-environment executable avoids changing PowerShell's script execution policy. On Linux/macOS, create the same environment with `python3 -m venv .venv` and use `.venv/bin/python` instead. Set `RUSTUP_TOOLCHAIN=1.95.0` for the build, or select another supported Rust toolchain. Re-run the package installation after changing native code.
+
+### Train PPO
+
+Start with the short segment on CPU:
+
+```powershell
+.\.venv\Scripts\python.exe -m altd_rl.train --config configs/rl/segment_ppo.yaml --seed 1729 --updates 20
+```
+
+Then train the full-lap task:
+
+```powershell
+.\.venv\Scripts\python.exe -m altd_rl.train --config configs/rl/rally_ppo.yaml --seed 1729 --updates 100
+```
+
+The segment configuration uses 32 cars and writes to `runs/segment_ppo`; the full-lap configuration uses 64 cars and writes to `runs/rally_ppo`. Add `--out runs/my_experiment` for a separate run. Each completed update prints learning metrics and saves `checkpoint.pt` and the actor-only `actor.pt`. Validation runs every ten updates and saves its selected checkpoint as `best.pt`; a run shorter than ten updates may not have that file. Episode summaries and learning metrics are in `episodes.jsonl` and `updates.jsonl`.
+
+Press Ctrl+C to stop. Resume from the most recent completed update:
+
+```powershell
+.\.venv\Scripts\python.exe -m altd_rl.train --resume runs/rally_ppo/checkpoint.pt --updates 100
+```
+
+`--updates 100` means **100 additional updates** when resuming. Learning and optimizer state are restored; environments reset and collection starts a new rollout. If the original run used `--out`, pass that same output directory on resume too. Use `--seconds 60` to stop between updates after a compute-time budget; an update already in progress can overrun it.
+
+### Evaluate and inspect a PPO driver
+
+Evaluate the selected full-lap checkpoint, then record and inspect its transitions:
+
+```powershell
+.\.venv\Scripts\python.exe -m altd_rl.evaluate --checkpoint runs/rally_ppo/best.pt --episodes 8
+.\.venv\Scripts\python.exe -m altd_rl.trace --checkpoint runs/rally_ppo/best.pt --episodes 3 --out runs/rally_ppo/trace
+.\.venv\Scripts\python.exe -m altd_rl.inspect runs/rally_ppo/trace
+```
+
+Use `checkpoint.pt` if `best.pt` does not exist yet. Evaluation reports valid completions, legal lap times and failures separately. These commands are headless: evaluation saves JSON, and traces save compressed NPZ arrays with JSON metadata. Repeated deterministic attempts at the shipped fixed start are reproducibility checks, not independent generalization trials.
+
+### Run FlashSAC and compare algorithms
+
+Install the optional research dependencies, then run the pinned official agent on the segment:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install ".[research]"
+.\.venv\Scripts\python.exe -m altd_rl.compare --config configs/rl/segment_ppo.yaml --steps 256 --seed 1729 --out runs/flashsac
+```
+
+The adapter fetches the official FlashSAC repository if needed and requires its unmodified pinned revision. It writes a research-agent checkpoint, episode summaries and `report.json`, including deterministic evaluation and the actual update-to-data ratios. FlashSAC checkpoints use the upstream format; PPO's `--resume` and `--checkpoint` commands do not load them. The adapter's tested CPU configuration and its differences from the paper's benchmark setup are documented in the [RL guide](docs/rl.md#research-comparisons-and-baselines).
+
+For a three-seed comparison with equal transition budgets:
+
+```powershell
+.\.venv\Scripts\python.exe -m altd_rl.experiments --config configs/rl/segment_ppo.yaml --updates 4 --flashsac --seeds 1729 1730 1731 --out runs/equal_transitions
+```
+
+For equal compute-time caps, use a high update ceiling and add `--wall-seconds 2`:
+
+```powershell
+.\.venv\Scripts\python.exe -m altd_rl.experiments --config configs/rl/segment_ppo.yaml --updates 1000 --flashsac --wall-seconds 2 --seeds 1729 1730 1731 --out runs/equal_wall
+```
+
+### CPU and GPU selection
+
+CPU is the default and the recommended starting point. `configs/rl/rally_gpu.yaml` selects the simulator's external-action GPU backend and requires a freshly built GPU library with the RL entry points. GPU parity was validated under WSL on an RTX 5070 Ti; the installed Windows CUDA 12.8 compiler failed even on a standalone kernel. See the [GPU bridge setup](docs/rl.md#gpu-bridge-and-ownership) for the tested WSL build and capability limits.
+
+Policy inference and simulator execution are separate choices: `--device cuda` selects PyTorch inference/learning on CUDA and additionally requires a CUDA-enabled PyTorch installation. It does not switch the simulator backend. The current large-batch benchmarks favor parallel CPU simulation over the GPU bridge, so a GPU is not required to start training.
+
+See the [complete RL guide](docs/rl.md) for schemas, reward formulas, reset semantics, artifact formats, legacy-network evaluation and correctness checks.

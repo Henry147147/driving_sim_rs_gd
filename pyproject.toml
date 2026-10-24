@@ -1,0 +1,15 @@
+[build-system]
+requires = ["maturin==1.12.6"]
+build-backend = "maturin"
+[project]
+name = "altd-rl"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["numpy==2.5.2", "torch==2.13.0", "PyYAML==6.0.3"]
+[project.optional-dependencies]
+test = ["pytest==9.0.2"]
+research = ["gymnasium==1.2.3", "jax==0.9.2", "omegaconf==2.3.0"]
+[tool.maturin]
+manifest-path = "bindings/python/Cargo.toml"
+python-source = "python"
+module-name = "altd_rl._native"

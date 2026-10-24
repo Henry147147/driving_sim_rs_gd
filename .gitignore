@@ -6,3 +6,8 @@
 /prof-*.tar.gz
 __pycache__/
 *.py[cod]
+
+/bindings/python/target/
+*.pyd
+*.egg-info/
+.pytest_cache/

@@ -36,10 +36,10 @@ pub fn device() -> Result<(&'static Gpu, &'static str), String> {
 }
 
 /// The device claim of one session, released when the session drops.
-struct Claim;
+pub(crate) struct Claim;
 
 impl Claim {
-    fn take() -> Option<Claim> {
+    pub(crate) fn take() -> Option<Claim> {
         IN_USE
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .ok()

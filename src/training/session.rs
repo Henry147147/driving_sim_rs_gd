@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
-mod hip;
+pub(crate) mod hip;
 mod input;
 #[cfg(not(target_arch = "wasm32"))]
 pub use hip::device as hip_device;

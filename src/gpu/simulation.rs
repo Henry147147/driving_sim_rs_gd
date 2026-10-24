@@ -1751,3 +1751,58 @@ mod native_validation_tests {
         assert!(error.contains("width 32"), "{error}");
     }
 }
+
+/// Compact external-action facts, ABI v1 (104 bytes). All rows from `rl_tick` are fresh.
+#[cfg(not(target_arch = "wasm32"))]
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug)]
+pub struct RlReport {
+    pub pose: [f32; 20],
+    pub flags: [u32; 4],
+    pub tick: u64,
+}
+#[cfg(not(target_arch = "wasm32"))]
+impl GpuSim<'_> {
+    /// Upload only [acceleration,steering,brake,handbrake,boost]. Never uploads agent stats.
+    pub fn rl_controls(&self, controls: &[[f64; 5]]) -> Result<(), String> {
+        if controls.len() != self.cars || controls.iter().flatten().any(|x| !x.is_finite()) {
+            return Err("invalid control batch".into());
+        }
+        let f: unsafe extern "C" fn(*mut c_void, u32, *const f64) -> i32 =
+            self.gpu.required_symbol("altd_gpu_rl_controls")?;
+        let code = unsafe { f(self.handle, self.cars as u32, controls.as_ptr().cast()) };
+        if code != 0 {
+            return Err(format!("rl_controls: {code}"));
+        }
+        Ok(())
+    }
+    /// One unchanged physics tick for selected cars; completed rows remain stationary.
+    pub fn rl_tick(&self, live: &[u8]) -> Result<Vec<RlReport>, String> {
+        if live.len() != self.cars || live.iter().any(|x| *x > 1) {
+            return Err("invalid live mask".into());
+        }
+        let f: unsafe extern "C" fn(*mut c_void, u32, *const u8, *mut RlReport) -> i32 =
+            self.gpu.required_symbol("altd_gpu_rl_tick")?;
+        let mut out = vec![RlReport::default(); self.cars];
+        let code = unsafe { f(self.handle, self.cars as u32, live.as_ptr(), out.as_mut_ptr()) };
+        if code != 0 {
+            return Err(format!("rl_tick: {code}"));
+        }
+        Ok(out)
+    }
+    pub fn rl_reset(&self, id: usize, car: &GpuCar) -> Result<(), String> {
+        if id >= self.cars {
+            return Err("reset id out of range".into());
+        }
+        let f: unsafe extern "C" fn(*mut c_void, u32, *const GpuCar) -> i32 =
+            self.gpu.required_symbol("altd_gpu_rl_reset")?;
+        let code = unsafe { f(self.handle, id as u32, car) };
+        if code != 0 {
+            return Err(format!("rl_reset: {code}"));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+const _: () = assert!(std::mem::size_of::<RlReport>() == 104);

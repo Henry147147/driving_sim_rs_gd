@@ -1,0 +1,754 @@
+{
+  "schema": "altd_rl_implementation_evidence_v1",
+  "date": "2026-10-24",
+  "reviewed_revision": "ab3ec6799f55aaca5fb286e4fef60276b15f333a",
+  "hardware": {
+    "cpu": "AMD Ryzen 9 9950X, 16 cores/32 threads",
+    "gpu": "NVIDIA GeForce RTX 5070 Ti, 16 GiB",
+    "driver": "616.92",
+    "cpu_training": "Windows 11 26200, CPython 3.14.3, torch 2.13.0+cpu, numpy 2.5.2",
+    "gpu_validation": "WSL Ubuntu 26.04, CUDA 13.2.51, Rust 1.95.0, gcc 15.2.0"
+  },
+  "full_lap": [
+    {
+      "seed": 1729,
+      "updates": 100,
+      "transitions": 1638400,
+      "physics_ticks": 6541264,
+      "collection_and_learning_seconds": 60.778117500023654,
+      "selected_checkpoint": "runs\\full_lap_seed1729\\best.pt",
+      "evaluation": {
+        "attempts": 8,
+        "completions": 8,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": 13.633333333333333,
+        "p90_valid_time": 13.633333333333333,
+        "best_valid_time": 13.633333333333333,
+        "task_kind": "full_lap",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "untrained_evaluation": {
+        "attempts": 4,
+        "completions": 0,
+        "completion_rate": 0.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": null,
+        "p90_valid_time": null,
+        "best_valid_time": null,
+        "task_kind": "full_lap",
+        "failures": {
+          "wall_contact": 4
+        },
+        "mean_failed_progress": 0.06456417790742984,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      }
+    },
+    {
+      "seed": 1730,
+      "updates": 100,
+      "transitions": 1638400,
+      "physics_ticks": 6544149,
+      "collection_and_learning_seconds": 62.834486600015225,
+      "selected_checkpoint": "runs\\full_lap_seed1730\\best.pt",
+      "evaluation": {
+        "attempts": 8,
+        "completions": 8,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": 13.383333333333333,
+        "p90_valid_time": 13.383333333333333,
+        "best_valid_time": 13.383333333333333,
+        "task_kind": "full_lap",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "untrained_evaluation": {
+        "attempts": 4,
+        "completions": 0,
+        "completion_rate": 0.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": null,
+        "p90_valid_time": null,
+        "best_valid_time": null,
+        "task_kind": "full_lap",
+        "failures": {
+          "wall_contact": 4
+        },
+        "mean_failed_progress": 0.07031211052908432,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      }
+    },
+    {
+      "seed": 1731,
+      "updates": 100,
+      "transitions": 1638400,
+      "physics_ticks": 6540260,
+      "collection_and_learning_seconds": 65.7580255000139,
+      "selected_checkpoint": "runs\\full_lap_seed1731\\best.pt",
+      "evaluation": {
+        "attempts": 8,
+        "completions": 8,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": 12.5,
+        "p90_valid_time": 12.5,
+        "best_valid_time": 12.5,
+        "task_kind": "full_lap",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "untrained_evaluation": {
+        "attempts": 4,
+        "completions": 0,
+        "completion_rate": 0.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": null,
+        "p90_valid_time": null,
+        "best_valid_time": null,
+        "task_kind": "full_lap",
+        "failures": {
+          "wall_contact": 4
+        },
+        "mean_failed_progress": 0.06505271151490108,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      }
+    }
+  ],
+  "equal_transitions": [
+    {
+      "algorithm": "PPO",
+      "seed": 1729,
+      "transitions": 8192,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": [
+          0.5100999795960008,
+          1
+        ],
+        "median_valid_time": 1.3666666666666667,
+        "p90_valid_time": 1.3666666666666667,
+        "best_valid_time": 1.3666666666666667,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "compute_seconds": 0.5148547999924631,
+      "process_wall_seconds": 2.5839742999996815,
+      "before": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": [
+          0.5100999795960008,
+          1
+        ],
+        "median_valid_time": 1.4666666666666666,
+        "p90_valid_time": 1.4666666666666666,
+        "best_valid_time": 1.4666666666666666,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      }
+    },
+    {
+      "algorithm": "official FlashSAC",
+      "seed": 1729,
+      "transitions": 8192,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": [
+          0.5100999795960008,
+          1
+        ],
+        "median_valid_time": 1.0666666666666667,
+        "p90_valid_time": 1.0666666666666667,
+        "best_valid_time": 1.0666666666666667,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "wall_seconds": 12.589926800003013,
+      "gradient_updates": 241,
+      "utd_gradient_steps": 0.0294189453125,
+      "sampled_items_per_transition": 7.53125,
+      "revision": "87edc9061150ae9e962dd84e6544e27a1554b3ab"
+    },
+    {
+      "algorithm": "PPO",
+      "seed": 1730,
+      "transitions": 8192,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": [
+          0.5100999795960008,
+          1
+        ],
+        "median_valid_time": 1.3333333333333333,
+        "p90_valid_time": 1.3333333333333333,
+        "best_valid_time": 1.3333333333333333,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "compute_seconds": 0.5093990999994276,
+      "process_wall_seconds": 3.0010935999998765,
+      "before": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": [
+          0.5100999795960008,
+          1
+        ],
+        "median_valid_time": 1.4666666666666666,
+        "p90_valid_time": 1.4666666666666666,
+        "best_valid_time": 1.4666666666666666,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      }
+    },
+    {
+      "algorithm": "official FlashSAC",
+      "seed": 1730,
+      "transitions": 8192,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 0,
+        "completion_rate": 0.0,
+        "completion_rate_ci95": [
+          0,
+          0.48990002040399916
+        ],
+        "median_valid_time": null,
+        "p90_valid_time": null,
+        "best_valid_time": null,
+        "task_kind": "segment",
+        "failures": {
+          "deadline": 4
+        },
+        "mean_failed_progress": 0.0,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "wall_seconds": 15.671105299999908,
+      "gradient_updates": 241,
+      "utd_gradient_steps": 0.0294189453125,
+      "sampled_items_per_transition": 7.53125,
+      "revision": "87edc9061150ae9e962dd84e6544e27a1554b3ab"
+    },
+    {
+      "algorithm": "PPO",
+      "seed": 1731,
+      "transitions": 8192,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": [
+          0.5100999795960008,
+          1
+        ],
+        "median_valid_time": 1.35,
+        "p90_valid_time": 1.35,
+        "best_valid_time": 1.35,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "compute_seconds": 0.9066410999985237,
+      "process_wall_seconds": 5.061926300000778,
+      "before": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": [
+          0.5100999795960008,
+          1
+        ],
+        "median_valid_time": 1.4666666666666666,
+        "p90_valid_time": 1.4666666666666666,
+        "best_valid_time": 1.4666666666666666,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      }
+    },
+    {
+      "algorithm": "official FlashSAC",
+      "seed": 1731,
+      "transitions": 8192,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 0,
+        "completion_rate": 0.0,
+        "completion_rate_ci95": [
+          0,
+          0.48990002040399916
+        ],
+        "median_valid_time": null,
+        "p90_valid_time": null,
+        "best_valid_time": null,
+        "task_kind": "segment",
+        "failures": {
+          "wall_contact": 4
+        },
+        "mean_failed_progress": 1.0,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "wall_seconds": 13.988068500002555,
+      "gradient_updates": 241,
+      "utd_gradient_steps": 0.0294189453125,
+      "sampled_items_per_transition": 7.53125,
+      "revision": "87edc9061150ae9e962dd84e6544e27a1554b3ab"
+    }
+  ],
+  "equal_wall": [
+    {
+      "algorithm": "PPO",
+      "seed": 1729,
+      "transitions": 32768,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": 1.1333333333333333,
+        "p90_valid_time": 1.1333333333333333,
+        "best_valid_time": 1.1333333333333333,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "compute_seconds": 1.8994539999948756,
+      "process_wall_seconds": 4.104512300000351,
+      "before": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": 1.4666666666666666,
+        "p90_valid_time": 1.4666666666666666,
+        "best_valid_time": 1.4666666666666666,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      }
+    },
+    {
+      "algorithm": "official FlashSAC",
+      "seed": 1729,
+      "transitions": 1728,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": 1.8,
+        "p90_valid_time": 1.8,
+        "best_valid_time": 1.8,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "wall_seconds": 2.0505800999999337,
+      "gradient_updates": 39,
+      "utd_gradient_steps": 0.022569444444444444,
+      "sampled_items_per_transition": 5.777777777777778,
+      "revision": "87edc9061150ae9e962dd84e6544e27a1554b3ab"
+    },
+    {
+      "algorithm": "PPO",
+      "seed": 1730,
+      "transitions": 32768,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": 1.15,
+        "p90_valid_time": 1.15,
+        "best_valid_time": 1.15,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "compute_seconds": 1.9396421999954327,
+      "process_wall_seconds": 4.1870218999974895,
+      "before": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": 1.4666666666666666,
+        "p90_valid_time": 1.4666666666666666,
+        "best_valid_time": 1.4666666666666666,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      }
+    },
+    {
+      "algorithm": "official FlashSAC",
+      "seed": 1730,
+      "transitions": 1728,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 0,
+        "completion_rate": 0.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": null,
+        "p90_valid_time": null,
+        "best_valid_time": null,
+        "task_kind": "segment",
+        "failures": {
+          "deadline": 4
+        },
+        "mean_failed_progress": 0.0,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "wall_seconds": 2.014263499997469,
+      "gradient_updates": 39,
+      "utd_gradient_steps": 0.022569444444444444,
+      "sampled_items_per_transition": 5.777777777777778,
+      "revision": "87edc9061150ae9e962dd84e6544e27a1554b3ab"
+    },
+    {
+      "algorithm": "PPO",
+      "seed": 1731,
+      "transitions": 32768,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": 1.1666666666666667,
+        "p90_valid_time": 1.1666666666666667,
+        "best_valid_time": 1.1666666666666667,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "compute_seconds": 1.9661716999980854,
+      "process_wall_seconds": 4.185907700000826,
+      "before": {
+        "attempts": 4,
+        "completions": 4,
+        "completion_rate": 1.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": 1.4666666666666666,
+        "p90_valid_time": 1.4666666666666666,
+        "best_valid_time": 1.4666666666666666,
+        "task_kind": "segment",
+        "failures": {},
+        "mean_failed_progress": null,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      }
+    },
+    {
+      "algorithm": "official FlashSAC",
+      "seed": 1731,
+      "transitions": 1728,
+      "evaluation": {
+        "attempts": 4,
+        "completions": 0,
+        "completion_rate": 0.0,
+        "completion_rate_ci95": null,
+        "unique_scenario_starts": 1,
+        "uncertainty_note": "Fixed deterministic start repeated; estimate uncertainty across independent scenarios/training seeds, not repetitions",
+        "median_valid_time": null,
+        "p90_valid_time": null,
+        "best_valid_time": null,
+        "task_kind": "segment",
+        "failures": {
+          "deadline": 4
+        },
+        "mean_failed_progress": 0.09165114858262087,
+        "seed": 9001,
+        "time_resolution_seconds": 0.016666666666666666
+      },
+      "wall_seconds": 2.043329799998901,
+      "gradient_updates": 39,
+      "utd_gradient_steps": 0.022569444444444444,
+      "sampled_items_per_transition": 5.777777777777778,
+      "revision": "87edc9061150ae9e962dd84e6544e27a1554b3ab"
+    }
+  ],
+  "python_bridge_benchmark": {
+    "hardware": "Windows-11-10.0.26200-SP0",
+    "processor": "AMD64 Family 26 Model 68 Stepping 0, AuthenticAMD",
+    "torch": "2.13.0+cpu",
+    "cuda": false,
+    "reports": [
+      {
+        "n": 64,
+        "transitions": 2048,
+        "physics_ticks": 8187,
+        "inference_seconds": 0.013330699999642093,
+        "environment_bridge_seconds": 0.03022600000258535,
+        "reset_seconds": 0.00035649999699671753,
+        "transitions_per_second": 46637.457530678315
+      },
+      {
+        "n": 256,
+        "transitions": 8192,
+        "physics_ticks": 32736,
+        "inference_seconds": 0.017775099993741605,
+        "environment_bridge_seconds": 0.10570660000303178,
+        "reset_seconds": 0.0004253000042808708,
+        "transitions_per_second": 66114.10170474871
+      },
+      {
+        "n": 1024,
+        "transitions": 32768,
+        "physics_ticks": 130967,
+        "inference_seconds": 0.042703399991296465,
+        "environment_bridge_seconds": 0.39508879999630153,
+        "reset_seconds": 0.0010267999969073571,
+        "transitions_per_second": 74673.15681672178
+      },
+      {
+        "n": 4096,
+        "transitions": 131072,
+        "physics_ticks": 523774,
+        "inference_seconds": 0.15621269999610377,
+        "environment_bridge_seconds": 1.9505968000157736,
+        "reset_seconds": 0.0034502999842516147,
+        "transitions_per_second": 62111.78358240082
+      }
+    ]
+  },
+  "native_cpu_benchmark": {
+    "backend": "cpu",
+    "scope": "environment including rules and selective resets; excludes initialization, policy and Python",
+    "reports": [
+      {
+        "n": 64,
+        "steps": 64,
+        "physics_ticks": 16256,
+        "resets": 64,
+        "seconds": 0.081188299,
+        "transitions_per_second": 50450.619737703826
+      },
+      {
+        "n": 256,
+        "steps": 64,
+        "physics_ticks": 65024,
+        "resets": 256,
+        "seconds": 0.052063513,
+        "transitions_per_second": 314692.55637820676
+      },
+      {
+        "n": 1024,
+        "steps": 64,
+        "physics_ticks": 260096,
+        "resets": 1024,
+        "seconds": 0.085950449,
+        "transitions_per_second": 762485.8364614245
+      },
+      {
+        "n": 4096,
+        "steps": 64,
+        "physics_ticks": 1040384,
+        "resets": 4096,
+        "seconds": 0.263353353,
+        "transitions_per_second": 995407.8693655364
+      }
+    ]
+  },
+  "native_gpu_benchmark": {
+    "backend": "gpu",
+    "scope": "environment including rules and selective resets; excludes initialization, policy and Python",
+    "reports": [
+      {
+        "n": 64,
+        "steps": 64,
+        "physics_ticks": 16256,
+        "resets": 64,
+        "seconds": 0.035241727,
+        "transitions_per_second": 116225.85919242834
+      },
+      {
+        "n": 256,
+        "steps": 64,
+        "physics_ticks": 65024,
+        "resets": 256,
+        "seconds": 0.089116559,
+        "transitions_per_second": 183849.10934453833
+      },
+      {
+        "n": 1024,
+        "steps": 64,
+        "physics_ticks": 260096,
+        "resets": 1024,
+        "seconds": 0.259578285,
+        "transitions_per_second": 252471.04163585947
+      },
+      {
+        "n": 4096,
+        "steps": 64,
+        "physics_ticks": 1040384,
+        "resets": 4096,
+        "seconds": 0.658616533,
+        "transitions_per_second": 398022.1978423976
+      }
+    ]
+  },
+  "trace": {
+    "schema": "altd_rl_trace_npz_v1",
+    "transitions": 615,
+    "completed_episodes": 3,
+    "reward_component_max_error": 0.0,
+    "outcomes": [
+      {
+        "env_id": 0,
+        "episode_id": 0,
+        "reason": "valid_completion",
+        "return_": 0.8863888888888912,
+        "ticks": 818
+      },
+      {
+        "env_id": 0,
+        "episode_id": 1,
+        "reason": "valid_completion",
+        "return_": 0.8863888888888912,
+        "ticks": 818
+      },
+      {
+        "env_id": 0,
+        "episode_id": 2,
+        "reason": "valid_completion",
+        "return_": 0.8863888888888912,
+        "ticks": 818
+      }
+    ]
+  },
+  "legacy_smokes": {
+    "ga": {
+      "generation": 3,
+      "population": 32,
+      "best_lap_s": null,
+      "best_network_file": null,
+      "stop_reason": {
+        "condition": "generations",
+        "generation": 2,
+        "value": 3,
+        "threshold": 3
+      }
+    },
+    "ars": {
+      "generation": 3,
+      "population": 32,
+      "best_lap_s": null,
+      "best_network_file": null,
+      "stop_reason": {
+        "condition": "generations",
+        "generation": 2,
+        "value": 3,
+        "threshold": 3
+      }
+    }
+  },
+  "limitations": [
+    "One analytic polygon ring and one fixed deterministic spawn; repeated evaluation episodes are not independent track-generalization cases.",
+    "Native benchmarks are one short 64-vector-step run per size, excluding initialization, framework inference and Python; no repeated-run uncertainty.",
+    "Two-second compute caps can be exceeded by one indivisible update; compare actual measured counts/time.",
+    "FlashSAC is the pinned official agent with gamma=1, n-step=1, CPU eager mode and affine control mapping; not a robot-paper reproduction.",
+    "Legacy smokes use their existing fitness and schedules; not matched fairness comparisons.",
+    "Windows CUDA12.8 host compiler crashes even for a trivial kernel; validated GPU library is Linux/WSL.",
+    "Resident rollout/zero-copy optimization is not claimed."
+  ],
+  "validation": {
+    "debug-tests": {
+      "passed": 259,
+      "failed": 0,
+      "ignored": 8,
+      "all_results_ok": true
+    },
+    "release-tests": {
+      "passed": 259,
+      "failed": 0,
+      "ignored": 8,
+      "all_results_ok": true
+    },
+    "python_tests_passed": 7,
+    "gpu_exact_parity_passed": true,
+    "wasm_compile_passed": true,
+    "clippy_rl_lib_bins_tests_example_passed": true,
+    "numerical_failure_sanitization_passed": true
+  }
+}
