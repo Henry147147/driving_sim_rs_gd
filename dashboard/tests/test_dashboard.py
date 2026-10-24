@@ -181,3 +181,15 @@ def test_job_summary_offsets_hide_preexisting_rows_and_results(setup):
     (folder/'updates.jsonl').write_text(old+'{"update":10}\n')
     summary=state.summary(folder,{'updates.jsonl':len(old)},since=time.time()+1)
     assert summary['updates']==[{'update':10}] and summary['report'] is None and not summary['files']
+
+
+def test_track_length_limit_rejected_before_saving_or_launching(setup):
+    client,state,headers,repo=setup
+    bad={'length':{'min':12,'max':100}}
+    assert client.post('/api/config',headers=headers,json={'text':json.dumps(bad),'format':'json'}).status_code==400
+    path=repo/'tracks.json';path.write_text(json.dumps(bad))
+    cfg=repo/'config.yaml';cfg.write_text(json.dumps({'scenario':{'track_mode':'random','random_track_settings':'tracks.json'}}))
+    result=client.post('/api/jobs',headers=headers,json={'tool':'train','arguments':['--config','config.yaml']})
+    assert result.status_code==400 and '76' in result.json()['detail'] and not state.jobs
+    good=client.post('/api/config',headers=headers,json={'text':json.dumps({'length':{'min':12,'max':76}}),'format':'json'})
+    assert good.status_code==200

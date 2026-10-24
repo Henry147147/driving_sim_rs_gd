@@ -136,10 +136,11 @@ $('tool').onchange=configure;$('launchForm').oninput=e=>{updateArgs();const id=e
 $('launchForm').onsubmit=async e=>{e.preventDefault();try{error('');if(!$('useAdvanced').checked&&['train','native:train-scratch'].includes(task())&&!$('resume').checked){if(state.configLoading)throw Error('Configuration is still loading.');if(state.configError)throw Error(state.configError);}const a=$('useAdvanced').checked?JSON.parse($('arguments').value):simpleArgs();if(!Array.isArray(a)||a.some(x=>typeof x!=='string'))throw Error('Arguments must be a JSON array of strings.');state.launching=true;clearProgress();$('startBtn').disabled=true;tab('monitor');if(task()==='train'&&!$('useAdvanced').checked&&!$('resume').checked){
  const cfg=state.quickConfig&&state.quickConfigPath===$('config').value?structuredClone(state.quickConfig):(await api('/api/config-data?path='+encodeURIComponent($('config').value))).value;
  cfg.learner.hidden_sizes=hiddenShape();cfg.scenario.sensors=await saveSensorLayout();
- cfg.training.preview_every=$('enableExamples').checked?1:0;delete cfg.training.preview_ticks;if(cfg.scenario.track_mode==='random')cfg.scenario.random_track_settings=$('ppoTrackPath').value;
+ cfg.training.preview_every=$('enableExamples').checked?1:0;delete cfg.training.preview_ticks;if(cfg.scenario.track_mode==='random'){cfg.scenario.random_track_settings=$('ppoTrackPath').value;validateTrackLength((await api('/api/config-data?path='+encodeURIComponent(cfg.scenario.random_track_settings))).value);}
  const saved=await api('/api/config',{method:'POST',body:{text:JSON.stringify(cfg,null,2)}});a[a.indexOf('--config')+1]=saved.path;
  }
  if(task()==='native:train-scratch'&&!$('useAdvanced').checked){
+ validateTrackLength((await api('/api/config-data?path='+encodeURIComponent($('trackSettings').value))).value);
  const layout=selectedSensorLayout(),network=(await api('/api/config-data?path=assets/networks/rally.json')).value,model=(await api('/api/config-data?path=assets/models/rally.json')).value;
  network.inputs=layout.names;model.sensor_layout=layout;
  const n=await api('/api/config',{method:'POST',body:{text:JSON.stringify(network),format:'json'}}),m=await api('/api/config',{method:'POST',body:{text:JSON.stringify(model),format:'json'}});
@@ -240,7 +241,8 @@ const configFields=[
  ['training.preview_every','Examples every N updates (0 off)',0,100,1],
  ['logging.trace_mode','Record training traces',['off','sampled_chunks']],['logging.episode_summaries','Episode summaries','boolean']
 ];
-const trackFields=[['length.min','Minimum tiles',4,100,2],['length.max','Maximum tiles',4,100,2],['allow_double','Allow double tiles','doubles'],['surfaces.pool','Road surfaces','surfaces']];
+const trackFields=[['length.min','Minimum tiles',4,76,2],['length.max','Maximum tiles',4,76,2],['allow_double','Allow double tiles','doubles'],['surfaces.pool','Road surfaces','surfaces']];
+function validateTrackLength(settings){const length=settings.length??{min:12,max:40},lo=typeof length==='number'?length:length.min,hi=typeof length==='number'?length:length.max;if(!Number.isInteger(lo)||!Number.isInteger(hi)||lo<4||hi>77||lo>hi||lo+lo%2>hi)throw Error('Game tracks require an even tile count from 4 to 76; minimum must not exceed maximum.');}
 function getField(obj,path){return path.split('.').reduce((o,k)=>o?.[k],obj);}
 function setField(obj,path,value){const parts=path.split('.');let o=obj;for(const k of parts.slice(0,-1))o=o[k]??={};o[parts.at(-1)]=value;}
 function controls(){
@@ -248,13 +250,13 @@ function controls(){
  let v=getField(editing,key);if(v==null&&key==='training.preview_every')v=0;if(v==null&&key==='training.preview_ticks')v=240;if(v==null)return '';
  if(Array.isArray(lo))return `<label>${esc(label)}<select data-key="${key}">${lo.map(x=>`<option ${x===v?'selected':''}>${x}</option>`).join('')}</select></label>`;
  if(typeof lo==='string')return `<label class="check"><input type="checkbox" data-key="${key}" data-kind="${lo}" ${(lo==='doubles'?v.includes(true):lo==='surfaces'?v.length>1:v)?'checked':''}>${esc(label)}${lo==='surfaces'?' (off = asphalt only)':''}</label>`;
- return `<label>${esc(label)}<output>${esc(v)}</output><input type="range" data-key="${key}" min="${Math.min(lo,v)}" max="${Math.max(hi,v)}" step="${step}" value="${v}"></label>`;
+ return `<label>${esc(label)}<output>${esc(v)}</output><input type="range" data-key="${key}" min="${editingTracks?lo:Math.min(lo,v)}" max="${editingTracks?hi:Math.max(hi,v)}" step="${step}" value="${v}"></label>`;
  }).join('');
 }
 async function editConfiguration(tracks){try{
  editingTracks=tracks;editing=tracks==='ppoTracks'?(await api('/api/config-data?path='+encodeURIComponent($('ppoTrackPath').value))).value:!tracks&&state.quickConfig&&state.quickConfigPath===$('config').value?structuredClone(state.quickConfig):(await api('/api/config-data?path='+encodeURIComponent($(tracks?'trackSettings':'config').value))).value;
  if(!editing||typeof editing!=='object')throw Error('Configuration must be an object');
- $('configText').value=JSON.stringify(editing,null,2);controls();$('editor').showModal();
+ $('configError').hidden=true;$('configText').value=JSON.stringify(editing,null,2);controls();$('editor').showModal();
  }catch(e){error(e.message);}}
 $('editConfig').onclick=()=>editConfiguration(false);$('editTracks').onclick=()=>editConfiguration(true);
 $('configControls').oninput=e=>{const el=e.target;if(!el.dataset.key)return;let v=el.type==='range'?Number(el.value):el.type==='checkbox'?el.checked:el.value;
@@ -263,7 +265,7 @@ $('configControls').oninput=e=>{const el=e.target;if(!el.dataset.key)return;let 
  setField(editing,el.dataset.key,v);if(el.dataset.key==='scenario.task_kind'&&v==='full_lap'){editing.scenario.target_gates=64;controls();}if(el.type==='range')el.previousElementSibling.textContent=el.value;$('configText').value=JSON.stringify(editing,null,2);
 };
 $('configText').onchange=()=>{try{editing=JSON.parse($('configText').value);controls();}catch{/* Backend also accepts YAML; do not discard raw edits. */}};
-$('saveConfig').onclick=async()=>{try{const saved=await api('/api/config',{method:'POST',body:{text:$('configText').value,format:editingTracks?'json':'yaml'}});$(editingTracks==='ppoTracks'?'ppoTrackPath':editingTracks?'trackSettings':'config').value=saved.path;$('editor').close();if(!editingTracks)loadQuickSettings();updateArgs();}catch(e){error(e.message);}};
+$('saveConfig').onclick=async()=>{try{if(editingTracks)validateTrackLength(JSON.parse($('configText').value));const saved=await api('/api/config',{method:'POST',body:{text:$('configText').value,format:editingTracks?'json':'yaml'}});$(editingTracks==='ppoTracks'?'ppoTrackPath':editingTracks?'trackSettings':'config').value=saved.path;$('editor').close();if(!editingTracks)loadQuickSettings();updateArgs();}catch(e){$('configError').textContent=e.message;$('configError').hidden=false;error(e.message);}};
 $('checkGpu').onclick=async()=>{const b=$('checkGpu');b.disabled=true;$('gpuStatus').textContent='Testing CUDA and backward pass...';try{const g=await api('/api/gpu');$('gpuStatus').textContent=g.cuda?`${g.device} / PyTorch ${g.torch} / backward pass ${g.backward?'passed':'failed'}. Simulator library: ${g.simulator_library||'missing; run setup'}. GPU Python: ${g.python}`:`CUDA unavailable: ${g.error||g.torch}. Run the setup command below.`;}catch(e){$('gpuStatus').textContent=e.message;}finally{b.disabled=false;}};
 $('exampleSelect').onchange=()=>{$('followExamples').checked=false;if(state.previewPath)loadPreview(state.previewPath);};
 $('upload').onclick=()=>$('fileUpload').click();$('fileUpload').onchange=async e=>{try{const f=e.target.files[0];if(f){$('checkpoint').value=(await api('/api/upload?name='+encodeURIComponent(f.name),{method:'POST',body:f})).path;updateArgs();}}catch(e){error(e.message);}};

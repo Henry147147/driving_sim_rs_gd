@@ -84,6 +84,15 @@ def clean(value):
     return value
 
 
+def validate_track_length(settings):
+    length=settings.get('length',{'min':12,'max':40})
+    if isinstance(length,int) and not isinstance(length,bool):lo=hi=length
+    elif isinstance(length,dict):lo,hi=length.get('min'),length.get('max')
+    else:raise ValueError('Track length must be an integer or a min/max range')
+    if any(not isinstance(x,int) or isinstance(x,bool) for x in (lo,hi)) or lo<4 or hi>77 or lo>hi or lo+lo%2>hi:
+        raise ValueError('Game tracks require an even tile count from 4 to 76; minimum must not exceed maximum (the grid has 77 cells)')
+
+
 class Dashboard:
     def __init__(self, repo: Path, python=sys.executable, data: Path | None = None,
                  token='', hosts=('127.0.0.1', 'localhost', 'testserver')):
@@ -225,6 +234,14 @@ print(json.dumps(r))"""
         if not isinstance(args, list) or len(args)>2048 or any(not isinstance(x, str) or chr(0) in x or len(x)>100_000 for x in args):
             raise HTTPException(400, 'Arguments must be a JSON array of strings')
         args=list(args)
+        if '--random-track-settings' in args:
+            settings=yaml.safe_load(self.path(args[args.index('--random-track-settings')+1]).read_text(encoding='utf-8-sig'))
+            validate_track_length(settings)
+        if tool=='train' and '--config' in args:
+            config=yaml.safe_load(self.path(args[args.index('--config')+1]).read_text(encoding='utf-8-sig'))
+            if config.get('scenario',{}).get('track_mode')=='random':
+                settings=yaml.safe_load(self.path(config['scenario'].get('random_track_settings','assets/random_track_settings.json')).read_text(encoding='utf-8-sig'))
+                validate_track_length(settings)
         output = self.output_for(tool, args)
         training_tool=tool in ('train','compare','experiments','trace','native:train-scratch') or (tool=='native' and 'train-scratch' in args)
         resume=any(x=='--resume' or x.startswith('--resume=') for x in args)
@@ -512,6 +529,7 @@ def create_app(repo, python=sys.executable, data=None, token='', hosts=('127.0.0
         try:
             value=yaml.safe_load(text)
             if not isinstance(value,dict): raise ValueError('Configuration must be an object')
+            if 'length' in value:validate_track_length(value)
         except (ValueError,yaml.YAMLError) as e: raise HTTPException(400,str(e))
         folder=state.data/'configs';folder.mkdir(exist_ok=True)
         suffix='.json' if payload.get('format')=='json' else '.yaml'
