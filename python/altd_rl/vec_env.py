@@ -20,6 +20,9 @@ def load_config(path):
         if not isinstance(learner[key],int) or isinstance(learner[key],bool) or learner[key]<=0:raise ValueError(f'invalid {key}')
     if len(learner['hidden_sizes'])==0 or any(not isinstance(x,int) or x<=0 for x in learner['hidden_sizes']):raise ValueError('invalid hidden_sizes')
     if not 0<=learner['gae_lambda']<=1 or not 0<learner['clip_epsilon']<1 or learner['learning_rate']<=0 or learner['target_kl']<=0 or learner['max_grad_norm']<=0:raise ValueError('invalid PPO hyperparameters')
+    for key,default in [('preview_every',0),('preview_ticks',240)]:
+        value=c['training'].get(key,default)
+        if not isinstance(value,int) or value<0 or (key=='preview_ticks' and value==0):raise ValueError(f'invalid {key}')
     if c['logging']['trace_mode'] not in ('off','sampled_chunks'):raise ValueError('unsupported trace_mode')
     return c
 

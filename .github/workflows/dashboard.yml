@@ -1,0 +1,23 @@
+name: Dashboard API
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dashboard:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: python -m pip install -r dashboard/requirements.txt pytest==9.0.2 httpx==0.28.1
+      - run: python -m pytest dashboard/tests -q
+      - run: node --check dashboard/web/app.js

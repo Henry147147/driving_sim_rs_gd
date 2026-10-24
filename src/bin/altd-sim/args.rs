@@ -225,6 +225,9 @@ pub(super) enum Command {
         /// Simulated ticks per generation (60 per second).
         #[arg(long, default_value_t = 5400)]
         ticks: u64,
+        /// Save a bounded car-0 driving example every N generations (0 disables).
+        #[arg(long, default_value_t = 0)]
+        preview_every: usize,
         /// Mutation rate of generation 0; adaptive mutation then scales it by network shape.
         #[arg(long, default_value_t = 0.4)]
         mutation_start: f64,

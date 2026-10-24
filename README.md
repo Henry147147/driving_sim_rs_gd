@@ -6,6 +6,19 @@
 
 The repository includes vehicle and sensor templates, tile resources, fixed generated tracks and self-contained tests. Campaign tracks are not distributed. Training supports the existing genetic algorithm (GA) and customized Augmented Random Search (ARS), plus a shared-policy PPO learner and an optional pinned FlashSAC research adapter. See [reinforcement learning](#reinforcement-learning) for the Python setup and commands.
 
+## Local training dashboard
+
+The repository includes a hostable web GUI for PPO, FlashSAC, GA/ARS and all CLI tools, with configuration sliders/toggles, live graphs, logs, checkpoints and per-epoch/generation driving examples.
+
+```powershell
+$env:RUSTUP_TOOLCHAIN="1.95"
+python -m pip install -e ".[dashboard]"
+cargo +1.95 build --release --bin altd-sim
+.\StartDashboard.cmd
+```
+
+Open [Racing Lab](http://127.0.0.1:8765). On Linux/macOS run `python dashboard/app.py`. For NVIDIA GPU setup, track generation details and dashboard controls, see [dashboard instructions](dashboard/README.md). The dashboard runs the simulator and trainers from this repository.
+
 ## Getting started
 
 This guide sets up `altd-sim serve`, the local simulator for [Drive Lab](https://drivinglab.jectrum.de). Drive Lab keeps your tracks, runs and downloads in the browser; the server drives the cars on your CPU threads or an AMD GPU. That removes the browser's limits on cars and network size and its eight-thread cap.

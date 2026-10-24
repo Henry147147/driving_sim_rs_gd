@@ -16,7 +16,7 @@ class ChunkWriter:
         for i,info in enumerate(b['info']):
             if i not in self.env_ids:continue
             row=dict(observation=b['observations'][i],next_observation=b['next_observations'][i],requested_action=np.array(info['requested_action']),applied_action=np.array(info['applied_action']),
-                     reward=np.array(b['rewards'][i]),terminated=np.array(b['terminated'][i]),truncated=np.array(b['truncated'][i]),policy_version=np.array(policy_version),info=info)
+                     reward=np.array(b['rewards'][i]),terminated=np.array(b['terminated'][i]),truncated=np.array(b['truncated'][i]),policy_version=np.array(policy_version),info=dict(info,policy_version=policy_version,training_update=policy_version+1))
             if learner:
                 for k,v in learner.items():
                     if k in ('u','old_log_prob','values','next_values','normalized_obs','episode_start','valid_transition_mask'):

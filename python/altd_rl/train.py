@@ -40,9 +40,15 @@ def main():
             for _ in range(a.updates if a.updates is not None else cfg['training']['updates']):
                 if a.seconds is not None and time.perf_counter()-training_started>=a.seconds:break
                 start=time.perf_counter();b,ticks=collector.collect(policy,cfg['learner']['rollout_steps'],summary,trace,counters['policy_version']);collected=time.perf_counter()
-                m=update(policy,opt,b,cfg['learner'],cfg['reward']['gamma']);end=time.perf_counter()
+                preview_every=int(cfg['training'].get('preview_every',0))
+                callback=None
+                if preview_every and (counters['update']+1)%preview_every==0:
+                    from .preview import record_example
+                    callback=lambda epoch:record_example(policy,cfg,out,counters['update']+1,epoch)
+                m=update(policy,opt,b,cfg['learner'],cfg['reward']['gamma'],epoch_callback=callback);end=time.perf_counter()
+                if trace:trace.flush()
                 counters['update']+=1;counters['policy_version']+=1;counters['transitions']+=b['rewards'].numel();counters['physics_ticks']+=ticks;counters['wall_seconds']+=end-start
-                m.update(counters);m.update(collection_seconds=collected-start,learner_seconds=end-collected,transitions_per_second=b['rewards'].numel()/(end-start))
+                m.update(counters);m.update(learner_device=str(next(policy.parameters()).device),environment_backend=cfg['environment']['backend'],collection_seconds=collected-start,learner_seconds=end-collected,transitions_per_second=b['rewards'].numel()/(end-start))
                 log.write(json.dumps(m)+'\n');print(json.dumps(m),flush=True)
                 checkpoint.save(out/'checkpoint.pt',policy,opt,cfg,env.provenance,counters)
                 checkpoint.export_actor(out/'actor.pt',policy,env.provenance)

@@ -25,6 +25,7 @@ pub(super) struct ScratchConfig {
     pub(super) population: usize,
     pub(super) generations: usize,
     pub(super) ticks: u64,
+    pub(super) preview_every: usize,
     pub(super) mutation_start: f64,
     pub(super) mutation_end: f64,
     pub(super) schedule: Schedule,

@@ -419,6 +419,23 @@ pub(crate) fn train_scratch(config: &ScratchConfig, threads: usize) {
                 name
             });
             let track_config = current_track.as_ref().map(|track| track.track.config.clone());
+            if config.preview_every > 0 && generation % config.preview_every == 0 && track_index == 0 {
+                let frames = runner.preview_agent(0, config.ticks.min(600)).expect("preview car");
+                let folder = dir.join("examples");
+                std::fs::create_dir_all(&folder).expect("example directory");
+                let centerline: Vec<_> = runner.world.track.path.iter().map(|p| [p.x, p.y]).collect();
+                let walls: Vec<_> = runner
+                    .world
+                    .track
+                    .walls
+                    .iter()
+                    .map(|w| [[w.start.x, w.start.y], [w.end.x, w.end.y]])
+                    .collect();
+                write_atomic_report(
+                    &folder.join(format!("g{generation:06}.json")),
+                    &json!({"schema":"altd_training_example_v1","kind":"generation","generation":generation,"label":format!("Generation {generation} / car 0"),"frames":frames,"centerline":centerline,"walls":walls,"cells":[],"note":"CPU replay of a cloned car 0 at generation start; training state and RNG unchanged; legacy lap rules"}),
+                );
+            }
             match (&mut gpu_sim, &gpu_world) {
                 (Some(sim), Some(world)) => {
                     runner

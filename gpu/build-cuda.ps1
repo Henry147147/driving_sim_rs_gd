@@ -9,6 +9,7 @@
 # combination; run the CPU/GPU checks in gpu/README.md before trusting the result.
 param(
     [string]$Out = $(if ($env:OUT) { $env:OUT } else { Join-Path $PSScriptRoot "..\target\gpu" }),
+    [string]$Nvcc = "nvcc",
     [string]$Arch = $(if ($env:CUDA_ARCH) { $env:CUDA_ARCH } else { "native" }),
     [switch]$AllowUnsupportedCompiler = ($env:CUDA_ALLOW_UNSUPPORTED_COMPILER -eq "1")
 )
@@ -49,7 +50,7 @@ if (-not (Get-Command cl -ErrorAction SilentlyContinue)) {
     $vs = & $vw -products * -latest -property installationPath
     $prefix = "`"$(Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat')`" >nul && "
 }
-$cmd = "${prefix}nvcc -x cu -O3 -std=c++20 -fmad=false $unsupported $archFlags -shared -Xcompiler /MD -o `"$dll`" `"$src`""
+$cmd = "${prefix}`"$Nvcc`" -x cu -O3 -std=c++20 -fmad=false $unsupported $archFlags -shared -Xcompiler /MD -o `"$dll`" `"$src`""
 cmd /c $cmd
 if ($LASTEXITCODE -ne 0) { throw "nvcc failed" }
 Write-Host "built $dll for $Arch"

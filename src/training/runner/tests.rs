@@ -380,3 +380,32 @@ fn export_state_into_matches_per_agent_export() {
         );
     }
 }
+
+#[test]
+fn preview_matches_car_trajectory_without_mutating_population() {
+    let seed = Network::xavier(&[20, 16, 5], &mut PyRandom::new(9));
+    let mut runner = generated_runner(24);
+    runner.start(&seed);
+    let mut reference = generated_runner(24);
+    reference.start(&seed);
+    let frames = runner.preview_agent(0, 120).unwrap();
+    assert!(!frames.is_empty());
+    assert_same_agents(&runner, &reference);
+    for frame in &frames {
+        let tick = frame["tick_end"].as_u64().unwrap();
+        reference.advance(tick - reference.tick, false);
+        assert_eq!(
+            frame["position"][0].as_f64().unwrap().to_bits(),
+            reference.agents[0].car.position.x.to_bits()
+        );
+        assert_eq!(
+            frame["position"][1].as_f64().unwrap().to_bits(),
+            reference.agents[0].car.position.y.to_bits()
+        );
+    }
+    runner.advance(reference.tick, false);
+    assert_same_agents(&runner, &reference);
+    runner.next_generation();
+    reference.next_generation();
+    assert_same_agents(&runner, &reference);
+}

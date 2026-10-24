@@ -68,3 +68,24 @@ def test_native_legacy_adapter_maps_named_outputs_and_restricts_brake():
     network=dict(shape=[20,5],weights=[[[0.]*5 for _ in range(20)]],biases=[[0.,0.,0.,-1.,0.]])
     raw=e.native.legacy_actions(json.dumps(network),Path('assets/networks/rally.json').read_text(encoding='utf-8-sig'),Path('assets/models/rally.json').read_text(encoding='utf-8-sig'))
     np.testing.assert_array_equal(np.frombuffer(raw,dtype='<f8'),np.zeros(5))
+
+
+def test_epoch_previews_do_not_change_policy_rng_or_training_env(tmp_path):
+    import json
+    from altd_rl.preview import record_example
+    torch.set_num_threads(1)
+    c=load_config('configs/rl/segment_ppo.yaml');c['environment']['num_envs']=2
+    c['training'].update(preview_every=1,preview_ticks=24)
+    e=VecEnv(c);p=ActorCritic(e.d);opt=torch.optim.Adam(p.parameters(),lr=.0003)
+    b,_=Collector(e).collect(p,4)
+    callbacks=[]
+    def preview(epoch):
+        before=copy.deepcopy(p.state_dict());rng=torch.get_rng_state();obs=e.observe().copy()
+        path=record_example(p,c,tmp_path,1,epoch);v=json.loads(path.read_text())
+        assert v['epoch']==epoch and v['cells'] and len(v['frames'])>1
+        assert v['frames'][-1]['tick_end']>=24 or v['frames'][-1]['reason'] is not None
+        assert all(torch.equal(before[k],v) for k,v in p.state_dict().items())
+        assert torch.equal(rng,torch.get_rng_state())
+        np.testing.assert_array_equal(obs,e.observe());callbacks.append(epoch)
+    m=update(p,opt,b,c['learner'],epoch_callback=preview)
+    assert callbacks==list(range(1,m['epochs_completed']+1))

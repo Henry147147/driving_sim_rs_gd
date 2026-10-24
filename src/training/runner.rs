@@ -104,6 +104,33 @@ pub struct TrainingRunner {
 }
 
 impl TrainingRunner {
+    /// Replay one cloned agent from the current generation boundary for a UI preview.
+    /// Neither training state nor RNG is mutated. Uses the original population's inference phase.
+    pub fn preview_agent(&self, index: usize, ticks: u64) -> Result<Vec<serde_json::Value>, String> {
+        let mut agent = self.agents.get(index).ok_or("preview car outside population")?.clone();
+        let schedule = self.schedule();
+        let bpt = self.batches_per_tick();
+        let mut frames = Vec::new();
+        let (duration, limit) = self.generation_window(ticks);
+        for k in 1..=duration {
+            let tick = self.tick + k;
+            schedule.update_stats(&mut agent, tick);
+            if !agent.car.active || (tick % 6 == self.stats_phase && ((tick - 6) / 6) as f64 * 0.1 >= limit) {
+                break;
+            }
+            let batch = (self.batch_index + ((k - 1) as usize % 8) * bpt) % 8;
+            schedule.drive_agent(index, &mut agent, tick, batch);
+            let p = agent.car.position;
+            if !p.x.is_finite() || !p.y.is_finite() {
+                break;
+            }
+            if k == 1 || k % 4 == 0 || !agent.car.active {
+                frames.push(serde_json::json!({"position":[p.x,p.y],"rotation":agent.car.rotation,"tick_end":tick,"episode_id":0}));
+            }
+        }
+        Ok(frames)
+    }
+
     // Preserve the public constructor's independent replay settings.
     #[allow(clippy::too_many_arguments)]
     pub fn new(

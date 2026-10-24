@@ -25,9 +25,11 @@ def evaluate(policy,cfg,episodes=32,seed=9001,trace=None,expected=None):
         for k in ('observation_hash','action_hash','scene_hash','route_hash','math_profile'):
             if expected[k]!=env.provenance[k]:raise ValueError(f'evaluation contract mismatch: {k}')
     obs=env.observe();summaries=[]
+    device=next(policy.parameters()).device if isinstance(policy,torch.nn.Module) else torch.device('cpu')
     while len(summaries)<episodes:
-        a,u,lp,v=policy.action(torch.from_numpy(obs),True);b=env.step(a.numpy())
-        if trace:trace.append(b,dict(u=u,old_log_prob=lp,values=v,normalized_obs=policy.transform(torch.from_numpy(obs))),0)
+        tensor=torch.as_tensor(obs,device=device)
+        a,u,lp,v=policy.action(tensor,True);b=env.step(a.cpu().numpy())
+        if trace:trace.append(b,dict(u=u,old_log_prob=lp,values=v,normalized_obs=policy.transform(tensor)),0)
         obs=b['next_observations']
         if b['terminated'][0] or b['truncated'][0]:
             summaries.append(b['info'][0]);obs=env.reset([0])
